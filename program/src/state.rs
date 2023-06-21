@@ -1,50 +1,13 @@
 //! Keyring Program state types
 
 use {
-    borsh::{BorshDeserialize, BorshSchema, BorshSerialize},
-    solana_program::{entrypoint::ProgramResult, program_error::ProgramError, pubkey::Pubkey},
+    bytemuck::{Pod, Zeroable},
+    solana_program::{program_error::ProgramError, pubkey::Pubkey},
 };
 
-/// Data struct for a keystore
-#[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
-pub struct Keystore {
-    /// TODO!
-    pub keys: Vec<u8>,
-}
-
-impl Keystore {
-    /// String literal seed prefix
-    const SEED_PREFIX: &'static str = "keystore";
-
-    /// Returns the seeds for this account as a vector of slices
-    pub fn seeds<'s>(authority: &'s Pubkey) -> Vec<&'s [u8]> {
-        vec![Self::SEED_PREFIX.as_bytes(), authority.as_ref()]
-    }
-
-    /// Returns the program-derived address and bump seed for this account type
-    /// using the provided arguments
-    pub fn pda(program_id: &Pubkey, authority: &Pubkey) -> (Pubkey, u8) {
-        Pubkey::find_program_address(&Self::seeds(authority), program_id)
-    }
-
-    /// Validates a passed `Pubkey` against the `Pubkey` returned from the
-    /// `pda(&self, ..)` method
-    pub fn check_pda(program_id: &Pubkey, authority: &Pubkey, pda: &Pubkey) -> ProgramResult {
-        let (pda_check, _) = Self::pda(program_id, authority);
-        if pda != &pda_check {
-            return Err(ProgramError::InvalidSeeds);
-        }
-        Ok(())
-    }
-}
-
 /// Data struct for an algorithm store
-#[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
-pub struct AlgorithmStore {
-    /// TODO!
-    pub keys: Vec<u8>,
-}
-
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AlgorithmStore {}
 impl AlgorithmStore {
     /// String literal seed prefix
     const SEED_PREFIX: &'static str = "algorithm_store";
@@ -62,11 +25,54 @@ impl AlgorithmStore {
 
     /// Validates a passed `Pubkey` against the `Pubkey` returned from the
     /// `pda(&self, ..)` method
-    pub fn check_pda(program_id: &Pubkey, pda: &Pubkey) -> ProgramResult {
-        let (pda_check, _) = Self::pda(program_id);
+    pub fn check_pda(program_id: &Pubkey, pda: &Pubkey) -> Result<u8, ProgramError> {
+        let (pda_check, bump_seed) = Self::pda(program_id);
         if pda != &pda_check {
             return Err(ProgramError::InvalidSeeds);
         }
-        Ok(())
+        Ok(bump_seed)
+    }
+}
+
+/// A Keystore state entry
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Pod, Zeroable)]
+pub struct KeyringEntry {
+    /// The algorithm discriminator
+    pub discriminator: [u8; 8],
+    /// The encryption key
+    pub key: [u8; 32],
+}
+
+/// Data struct for a keystore
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Keystore {}
+impl Keystore {
+    /// String literal seed prefix
+    const SEED_PREFIX: &'static str = "keystore";
+
+    /// Returns the seeds for this account as a vector of slices
+    pub fn seeds<'s>(authority: &'s Pubkey) -> Vec<&'s [u8]> {
+        vec![Self::SEED_PREFIX.as_bytes(), authority.as_ref()]
+    }
+
+    /// Returns the program-derived address and bump seed for this account type
+    /// using the provided arguments
+    pub fn pda(program_id: &Pubkey, authority: &Pubkey) -> (Pubkey, u8) {
+        Pubkey::find_program_address(&Self::seeds(authority), program_id)
+    }
+
+    /// Validates a passed `Pubkey` against the `Pubkey` returned from the
+    /// `pda(&self, ..)` method
+    pub fn check_pda(
+        program_id: &Pubkey,
+        authority: &Pubkey,
+        pda: &Pubkey,
+    ) -> Result<u8, ProgramError> {
+        let (pda_check, bump_seed) = Self::pda(program_id, authority);
+        if pda != &pda_check {
+            return Err(ProgramError::InvalidSeeds);
+        }
+        Ok(bump_seed)
     }
 }

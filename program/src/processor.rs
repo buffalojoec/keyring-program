@@ -9,8 +9,11 @@ use {
         account_info::{next_account_info, AccountInfo},
         entrypoint::ProgramResult,
         msg,
+        program::invoke_signed,
         program_error::ProgramError,
         pubkey::Pubkey,
+        rent::Rent,
+        system_instruction,
     },
 };
 
@@ -31,10 +34,30 @@ pub fn process_initialize_algorithm_store(
     let algorithm_store_info = next_account_info(account_info_iter)?;
     let authority_info = next_account_info(account_info_iter)?;
 
-    AlgorithmStore::check_pda(program_id, algorithm_store_info.key)?;
-    check_authority(authority_info)?;
+    let bump_seed = {
+        check_authority(authority_info)?;
+        AlgorithmStore::check_pda(program_id, algorithm_store_info.key)?
+    };
 
-    Ok(())
+    let algorithm_store = [0u8; 8]; // TODO!
+
+    let space = algorithm_store.len();
+    let lamports = Rent::default().minimum_balance(space);
+    let mut signer_seeds = AlgorithmStore::seeds();
+    let bump_signer_seed = [bump_seed];
+    signer_seeds.push(&bump_signer_seed);
+
+    invoke_signed(
+        &system_instruction::create_account(
+            authority_info.key,
+            algorithm_store_info.key,
+            lamports,
+            space as u64,
+            program_id,
+        ),
+        &[authority_info.clone(), algorithm_store_info.clone()],
+        &[&signer_seeds],
+    )
 }
 
 /// Processes a `AddAlgorithm` instruction.
@@ -70,10 +93,30 @@ pub fn process_create_keystore(program_id: &Pubkey, accounts: &[AccountInfo]) ->
     let keystore_info = next_account_info(account_info_iter)?;
     let authority_info = next_account_info(account_info_iter)?;
 
-    Keystore::check_pda(program_id, authority_info.key, keystore_info.key)?;
-    check_authority(authority_info)?;
+    let bump_seed = {
+        check_authority(authority_info)?;
+        Keystore::check_pda(program_id, authority_info.key, keystore_info.key)?
+    };
 
-    Ok(())
+    let keystore = [0u8; 8]; // TODO!
+
+    let space = keystore.len();
+    let lamports = Rent::default().minimum_balance(space);
+    let mut signer_seeds = Keystore::seeds(authority_info.key);
+    let bump_signer_seed = [bump_seed];
+    signer_seeds.push(&bump_signer_seed);
+
+    invoke_signed(
+        &system_instruction::create_account(
+            authority_info.key,
+            keystore_info.key,
+            lamports,
+            space as u64,
+            program_id,
+        ),
+        &[authority_info.clone(), keystore_info.clone()],
+        &[&signer_seeds],
+    )
 }
 
 /// Processes a `AddKey` instruction.

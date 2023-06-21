@@ -8,6 +8,8 @@ license = "Apache-2.0"
 edition = "2021"
 
 [dependencies]
+async-trait = "0.1.68"
 solana-client = "=1.14.12"
+solana-program-test = "=1.14.12"
 solana-sdk = "=1.14.12"
-spl-keyring-program = { path = "../keyring-program" }
+spl-keyring-program = { path = "../program", features = ["no-entrypoint"] }
