@@ -27,7 +27,7 @@ pub enum KeyringProgramInstruction {
     ///   1. `[s]` Authority
     AddKey {
         /// Vector of bytes to be passed in as a new TLV-based keystore entry
-        new_key_data: Vec<u8>,
+        add_key_data: Vec<u8>,
     },
     /// Remove a key from the keystore
     ///
@@ -50,11 +50,13 @@ impl KeyringProgramInstruction {
             KeyringProgramInstruction::CreateKeystore {} => {
                 buf.push(0);
             }
-            KeyringProgramInstruction::AddKey { new_key_data: _ } => {
+            KeyringProgramInstruction::AddKey { add_key_data } => {
                 buf.push(1);
+                buf.extend_from_slice(add_key_data);
             }
-            KeyringProgramInstruction::RemoveKey { remove_key_data: _ } => {
+            KeyringProgramInstruction::RemoveKey { remove_key_data } => {
                 buf.push(2);
+                buf.extend_from_slice(remove_key_data);
             }
         }
         buf
@@ -68,7 +70,7 @@ impl KeyringProgramInstruction {
         Ok(match instruction {
             0 => KeyringProgramInstruction::CreateKeystore,
             1 => KeyringProgramInstruction::AddKey {
-                new_key_data: rest.to_vec(),
+                add_key_data: rest.to_vec(),
             },
             2 => KeyringProgramInstruction::RemoveKey {
                 remove_key_data: rest.to_vec(),
@@ -103,11 +105,11 @@ pub fn create_keystore(
 pub fn add_key(
     program_id: &Pubkey,
     authority: &Pubkey,
-    new_key_data: Vec<u8>,
+    add_key_data: Vec<u8>,
 ) -> Result<Instruction, ProgramError> {
     let keystore = Keystore::pda(program_id, authority).0;
 
-    let data = KeyringProgramInstruction::AddKey { new_key_data }.pack();
+    let data = KeyringProgramInstruction::AddKey { add_key_data }.pack();
 
     let accounts = vec![
         AccountMeta::new(keystore, true),

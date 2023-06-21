@@ -3907,6 +3907,7 @@ dependencies = [
 name = "spl-keyring-program"
 version = "0.1.0"
 dependencies = [
+ "borsh",
  "bytemuck",
  "solana-program",
  "spl-program-error",

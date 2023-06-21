@@ -58,7 +58,7 @@ pub fn process_create_keystore(program_id: &Pubkey, accounts: &[AccountInfo]) ->
 pub fn process_add_key(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
-    new_key_data: Vec<u8>,
+    add_key_data: Vec<u8>,
 ) -> ProgramResult {
     let account_info_iter = &mut accounts.iter();
 
@@ -68,7 +68,7 @@ pub fn process_add_key(
     Keystore::check_pda(program_id, authority_info.key, keystore_info.key)?;
     check_authority(authority_info)?;
 
-    Keystore::add_key(&mut keystore_info.try_borrow_mut_data()?, new_key_data)
+    Keystore::add_key(&keystore_info, add_key_data)
 }
 
 /// Processes a `RemoveKey` instruction.
@@ -85,7 +85,7 @@ pub fn process_remove_key(
     Keystore::check_pda(program_id, authority_info.key, keystore_info.key)?;
     check_authority(authority_info)?;
 
-    Keystore::remove_key(&mut keystore_info.try_borrow_mut_data()?, remove_key_data)
+    Keystore::remove_key(&keystore_info, remove_key_data)
 }
 
 /// Processes a `KeyringProgramInstruction` instruction.
@@ -97,9 +97,9 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
             msg!("Instruction: CreateKeystore");
             process_create_keystore(program_id, accounts)
         }
-        KeyringProgramInstruction::AddKey { new_key_data } => {
+        KeyringProgramInstruction::AddKey { add_key_data } => {
             msg!("Instruction: AddKey");
-            process_add_key(program_id, accounts, new_key_data)
+            process_add_key(program_id, accounts, add_key_data)
         }
         KeyringProgramInstruction::RemoveKey { remove_key_data } => {
             msg!("Instruction: RemoveKey");
