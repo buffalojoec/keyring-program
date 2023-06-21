@@ -1,0 +1,25 @@
+[package]
+name = "spl-keyring-program"
+version = "0.1.0"
+description = "Solana Program Library Keyring Program"
+authors = ["Solana Labs Maintainers <maintainers@solanalabs.com>"]
+repository = "https://github.com/solana-labs/solana-program-library"
+license = "Apache-2.0"
+edition = "2021"
+
+[features]
+no-entrypoint = []
+test-sbf = []
+
+[dependencies]
+borsh = "0.9.3"
+bytemuck = "1.13.1"
+solana-program = "1.14.12"
+spl-program-error = { version = "0.1.0", git = "https://github.com/solana-labs/solana-program-library", branch = "master" }
+spl-type-length-value = { version = "0.1.0", git = "https://github.com/solana-labs/solana-program-library", branch = "master" }
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]

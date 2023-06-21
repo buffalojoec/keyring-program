@@ -1,0 +1,13 @@
+[package]
+name = "spl-keyring-program-client"
+version = "0.1.0"
+description = "Solana Program Library Keyring Program Rust Client"
+authors = ["Solana Labs Maintainers <maintainers@solanalabs.com>"]
+repository = "https://github.com/solana-labs/solana-program-library"
+license = "Apache-2.0"
+edition = "2021"
+
+[dependencies]
+solana-client = "=1.14.12"
+solana-sdk = "=1.14.12"
+spl-keyring-program = { path = "../keyring-program" }
