@@ -1,7 +1,7 @@
 //! Keyring Program instructions
 
 use {
-    crate::state::{AlgorithmStore, Keystore},
+    crate::state::Keystore,
     solana_program::{
         instruction::{AccountMeta, Instruction},
         program_error::ProgramError,
@@ -12,48 +12,34 @@ use {
 /// Keyring Program instructions.
 #[derive(Clone, Debug, PartialEq)]
 pub enum KeyringProgramInstruction {
-    /// Initialize the algorithm store
-    ///
-    /// Accounts expected by this instruction:
-    ///
-    ///   0. `[w]` AlgorithmStore
-    ///   1. `[s]` MultiSig Authority
-    InitializeAlgorithmStore {},
-    /// Add an algorithm to the algorithm store
-    ///
-    /// Accounts expected by this instruction:
-    ///
-    ///   0. `[w]` AlgorithmStore
-    ///   1. `[s]` MultiSig Authority
-    AddAlgorithm {},
-    /// Remove an algorithm from the algorithm store
-    ///
-    /// Accounts expected by this instruction:
-    ///
-    ///   0. `[w]` AlgorithmStore
-    ///   1. `[s]` MultiSig Authority
-    RemoveAlgorithm {},
     /// Create a new keystore
     ///
     /// Accounts expected by this instruction:
     ///
     ///   0. `[w]` Keystore
     ///   1. `[s]` Authority
-    CreateKeystore {},
+    CreateKeystore,
     /// Add a key to the keystore
     ///
     /// Accounts expected by this instruction:
     ///
     ///   0. `[w]` Keystore
     ///   1. `[s]` Authority
-    AddKey {},
+    AddKey {
+        /// Vector of bytes to be passed in as a new TLV-based keystore entry
+        new_key_data: Vec<u8>,
+    },
     /// Remove a key from the keystore
     ///
     /// Accounts expected by this instruction:
     ///
     ///   0. `[w]` Keystore
     ///   1. `[s]` Authority
-    RemoveKey {},
+    RemoveKey {
+        /// Vector of bytes to be passed in as the TLV-based keystore entry to
+        /// delete
+        remove_key_data: Vec<u8>,
+    },
 }
 
 impl KeyringProgramInstruction {
@@ -61,23 +47,14 @@ impl KeyringProgramInstruction {
     pub fn pack(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         match self {
-            KeyringProgramInstruction::InitializeAlgorithmStore {} => {
+            KeyringProgramInstruction::CreateKeystore {} => {
                 buf.push(0);
             }
-            KeyringProgramInstruction::AddAlgorithm {} => {
+            KeyringProgramInstruction::AddKey { new_key_data: _ } => {
                 buf.push(1);
             }
-            KeyringProgramInstruction::RemoveAlgorithm {} => {
+            KeyringProgramInstruction::RemoveKey { remove_key_data: _ } => {
                 buf.push(2);
-            }
-            KeyringProgramInstruction::CreateKeystore {} => {
-                buf.push(3);
-            }
-            KeyringProgramInstruction::AddKey {} => {
-                buf.push(4);
-            }
-            KeyringProgramInstruction::RemoveKey {} => {
-                buf.push(5);
             }
         }
         buf
@@ -85,90 +62,26 @@ impl KeyringProgramInstruction {
 
     /// Unpacks a byte buffer into a `KeyringProgramInstruction`.
     pub fn unpack(input: &[u8]) -> Result<Self, ProgramError> {
-        let instruction = match input[0] {
-            0 => KeyringProgramInstruction::InitializeAlgorithmStore {},
-            1 => KeyringProgramInstruction::AddAlgorithm {},
-            2 => KeyringProgramInstruction::RemoveAlgorithm {},
-            3 => KeyringProgramInstruction::CreateKeystore {},
-            4 => KeyringProgramInstruction::AddKey {},
-            5 => KeyringProgramInstruction::RemoveKey {},
+        let (instruction, rest) = input
+            .split_first()
+            .ok_or(ProgramError::InvalidInstructionData)?;
+        Ok(match instruction {
+            0 => KeyringProgramInstruction::CreateKeystore,
+            1 => KeyringProgramInstruction::AddKey {
+                new_key_data: rest.to_vec(),
+            },
+            2 => KeyringProgramInstruction::RemoveKey {
+                remove_key_data: rest.to_vec(),
+            },
             _ => return Err(ProgramError::InvalidInstructionData),
-        };
-        Ok(instruction)
+        })
     }
-}
-
-/// Creates an 'InitializeAlgorithmStore' instruction.
-pub fn initialize_algorithm_store(
-    program_id: &Pubkey,
-    authority: &Pubkey,
-    _data: Vec<u8>,
-) -> Result<Instruction, ProgramError> {
-    let algorithm_store = AlgorithmStore::pda(program_id).0;
-
-    let data = KeyringProgramInstruction::InitializeAlgorithmStore {}.pack();
-
-    let accounts = vec![
-        AccountMeta::new(algorithm_store, true),
-        AccountMeta::new_readonly(*authority, false),
-    ];
-
-    Ok(Instruction {
-        program_id: *program_id,
-        accounts,
-        data,
-    })
-}
-
-/// Creates an 'AddAlgorithm' instruction.
-pub fn add_algorithm(
-    program_id: &Pubkey,
-    authority: &Pubkey,
-    _data: Vec<u8>,
-) -> Result<Instruction, ProgramError> {
-    let algorithm_store = AlgorithmStore::pda(program_id).0;
-
-    let data = KeyringProgramInstruction::AddAlgorithm {}.pack();
-
-    let accounts = vec![
-        AccountMeta::new(algorithm_store, true),
-        AccountMeta::new(*authority, true),
-    ];
-
-    Ok(Instruction {
-        program_id: *program_id,
-        accounts,
-        data,
-    })
-}
-
-/// Creates a 'RemoveAlgorithm' instruction.
-pub fn remove_algorithm(
-    program_id: &Pubkey,
-    authority: &Pubkey,
-    _data: Vec<u8>,
-) -> Result<Instruction, ProgramError> {
-    let algorithm_store = AlgorithmStore::pda(program_id).0;
-
-    let data = KeyringProgramInstruction::RemoveAlgorithm {}.pack();
-
-    let accounts = vec![
-        AccountMeta::new(algorithm_store, true),
-        AccountMeta::new(*authority, true),
-    ];
-
-    Ok(Instruction {
-        program_id: *program_id,
-        accounts,
-        data,
-    })
 }
 
 /// Creates a 'CreateKeystore' instruction.
 pub fn create_keystore(
     program_id: &Pubkey,
     authority: &Pubkey,
-    _data: Vec<u8>,
 ) -> Result<Instruction, ProgramError> {
     let keystore = Keystore::pda(program_id, authority).0;
 
@@ -190,11 +103,11 @@ pub fn create_keystore(
 pub fn add_key(
     program_id: &Pubkey,
     authority: &Pubkey,
-    _data: Vec<u8>,
+    new_key_data: Vec<u8>,
 ) -> Result<Instruction, ProgramError> {
     let keystore = Keystore::pda(program_id, authority).0;
 
-    let data = KeyringProgramInstruction::AddKey {}.pack();
+    let data = KeyringProgramInstruction::AddKey { new_key_data }.pack();
 
     let accounts = vec![
         AccountMeta::new(keystore, true),
@@ -212,11 +125,11 @@ pub fn add_key(
 pub fn remove_key(
     program_id: &Pubkey,
     authority: &Pubkey,
-    _data: Vec<u8>,
+    remove_key_data: Vec<u8>,
 ) -> Result<Instruction, ProgramError> {
     let keystore = Keystore::pda(program_id, authority).0;
 
-    let data = KeyringProgramInstruction::AddKey {}.pack();
+    let data = KeyringProgramInstruction::RemoveKey { remove_key_data }.pack();
 
     let accounts = vec![
         AccountMeta::new(keystore, true),
