@@ -33,10 +33,7 @@ pub fn process_create_keystore(program_id: &Pubkey, accounts: &[AccountInfo]) ->
         Keystore::check_pda(program_id, authority_info.key, keystore_info.key)?
     };
 
-    let keystore = [0u8; 8]; // TODO!
-
-    let space = keystore.len();
-    let lamports = Rent::default().minimum_balance(space);
+    let lamports = Rent::default().minimum_balance(0);
     let mut signer_seeds = Keystore::seeds(authority_info.key);
     let bump_signer_seed = [bump_seed];
     signer_seeds.push(&bump_signer_seed);
@@ -46,7 +43,7 @@ pub fn process_create_keystore(program_id: &Pubkey, accounts: &[AccountInfo]) ->
             authority_info.key,
             keystore_info.key,
             lamports,
-            space as u64,
+            0u64,
             program_id,
         ),
         &[authority_info.clone(), keystore_info.clone()],
