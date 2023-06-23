@@ -15,6 +15,7 @@ test-sbf = []
 borsh = "0.9.3"
 bytemuck = "1.13.1"
 solana-program = "1.14.12"
+spl-discriminator = { version = "0.1.0", path = "../../spl-tlv-stuff/libraries/discriminator" }
 spl-program-error = { version = "0.1.0", git = "https://github.com/solana-labs/solana-program-library", branch = "master" }
 spl-type-length-value = { version = "0.1.0", git = "https://github.com/solana-labs/solana-program-library", branch = "master" }
 

@@ -3904,12 +3904,75 @@ dependencies = [
 ]
 
 [[package]]
+name = "spl-discriminator"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "bytemuck",
+ "solana-program",
+ "spl-discriminator-derive 0.1.0",
+]
+
+[[package]]
+name = "spl-discriminator"
+version = "0.1.0"
+source = "git+https://github.com/solana-labs/solana-program-library?branch=master#307d10ea445a385f3e0ce23152c0ac47cd88574c"
+dependencies = [
+ "bytemuck",
+ "solana-program",
+ "spl-discriminator-derive 0.1.0 (git+https://github.com/solana-labs/solana-program-library?branch=master)",
+]
+
+[[package]]
+name = "spl-discriminator-derive"
+version = "0.1.0"
+dependencies = [
+ "quote 1.0.28",
+ "spl-discriminator-syn 0.1.0",
+ "syn 2.0.18",
+]
+
+[[package]]
+name = "spl-discriminator-derive"
+version = "0.1.0"
+source = "git+https://github.com/solana-labs/solana-program-library?branch=master#307d10ea445a385f3e0ce23152c0ac47cd88574c"
+dependencies = [
+ "quote 1.0.28",
+ "spl-discriminator-syn 0.1.0 (git+https://github.com/solana-labs/solana-program-library?branch=master)",
+ "syn 2.0.18",
+]
+
+[[package]]
+name = "spl-discriminator-syn"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2 1.0.60",
+ "quote 1.0.28",
+ "solana-program",
+ "syn 2.0.18",
+ "thiserror",
+]
+
+[[package]]
+name = "spl-discriminator-syn"
+version = "0.1.0"
+source = "git+https://github.com/solana-labs/solana-program-library?branch=master#307d10ea445a385f3e0ce23152c0ac47cd88574c"
+dependencies = [
+ "proc-macro2 1.0.60",
+ "quote 1.0.28",
+ "solana-program",
+ "syn 2.0.18",
+ "thiserror",
+]
+
+[[package]]
 name = "spl-keyring-program"
 version = "0.1.0"
 dependencies = [
  "borsh",
  "bytemuck",
  "solana-program",
+ "spl-discriminator 0.1.0",
  "spl-program-error",
  "spl-type-length-value",
 ]
@@ -3937,7 +4000,7 @@ dependencies = [
 [[package]]
 name = "spl-program-error"
 version = "0.1.0"
-source = "git+https://github.com/solana-labs/solana-program-library?branch=master#eb077c70d99384c69dc298d87632c2a0f7fc90e8"
+source = "git+https://github.com/solana-labs/solana-program-library?branch=master#307d10ea445a385f3e0ce23152c0ac47cd88574c"
 dependencies = [
  "num-derive",
  "num-traits",
@@ -3949,7 +4012,7 @@ dependencies = [
 [[package]]
 name = "spl-program-error-derive"
 version = "0.1.0"
-source = "git+https://github.com/solana-labs/solana-program-library?branch=master#eb077c70d99384c69dc298d87632c2a0f7fc90e8"
+source = "git+https://github.com/solana-labs/solana-program-library?branch=master#307d10ea445a385f3e0ce23152c0ac47cd88574c"
 dependencies = [
  "proc-macro2 1.0.60",
  "quote 1.0.28",
@@ -3992,7 +4055,7 @@ dependencies = [
 [[package]]
 name = "spl-type-length-value"
 version = "0.1.0"
-source = "git+https://github.com/solana-labs/solana-program-library?branch=master#eb077c70d99384c69dc298d87632c2a0f7fc90e8"
+source = "git+https://github.com/solana-labs/solana-program-library?branch=master#307d10ea445a385f3e0ce23152c0ac47cd88574c"
 dependencies = [
  "arrayref",
  "bytemuck",
@@ -4000,6 +4063,7 @@ dependencies = [
  "num-traits",
  "num_enum 0.6.1",
  "solana-program",
+ "spl-discriminator 0.1.0 (git+https://github.com/solana-labs/solana-program-library?branch=master)",
  "thiserror",
 ]
 
