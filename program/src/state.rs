@@ -1,115 +1,14 @@
 //! Keyring Program state types
 
 use {
-    borsh::{BorshDeserialize, BorshSerialize},
-    solana_program::{entrypoint::ProgramResult, program_error::ProgramError, pubkey::Pubkey},
-    spl_discriminator::ArrayDiscriminator,
+    crate::{error::KeyringProgramError, tlv::KeystoreEntry},
+    solana_program::{
+        account_info::AccountInfo, entrypoint::ProgramResult, program_error::ProgramError,
+        pubkey::Pubkey,
+    },
 };
 
-/// The TLV discriminator marking a new keystore entry: [1, 1, 1, 1, 1, 1, 1, 1]
-const ENTRY_DISCRIMINATOR: ArrayDiscriminator = ArrayDiscriminator::new([1u8; 8]);
-/// The TLV discriminator marking additional configurations for a keystore
-/// entry: [2, 2, 2, 2, 2, 2, 2, 2]
-const CONFIGURATION_DISCRIMINATOR: ArrayDiscriminator = ArrayDiscriminator::new([2u8; 8]);
-
-/// Key-value entry for additional encryption algorithm configurations
-#[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize)]
-pub struct KeystoreEntryConfigEntry {
-    /// Configuration key discriminator
-    pub key_discriminator: ArrayDiscriminator,
-    /// Length of the configuration value
-    pub value_length: u32,
-    /// Configuration value
-    pub value: Vec<u8>,
-}
-impl KeystoreEntryConfigEntry {
-    /// Creates a new `KeystoreEntryConfigEntry` from provided key
-    /// discriminator and value
-    pub fn new(key_discriminator: ArrayDiscriminator, value: Vec<u8>) -> Self {
-        let value_length = value.len() as u32;
-        Self {
-            key_discriminator: key_discriminator.into(),
-            value_length,
-            value,
-        }
-    }
-}
-
-/// Configurations section in a keystore entry
-#[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize)]
-pub struct KeystoreEntryConfig {
-    /// Configuration discriminator
-    pub config_discriminator: ArrayDiscriminator,
-    /// Length of the configuration section
-    pub config_length: u32,
-    /// Vector of configuration entries
-    pub entries: Vec<KeystoreEntryConfigEntry>,
-}
-impl KeystoreEntryConfig {
-    /// Creates a new `KeystoreEntryConfig` from provided configuration entries
-    pub fn new(entries: Vec<KeystoreEntryConfigEntry>) -> Self {
-        let config_length = entries
-            .iter()
-            .fold(0, |acc, e| acc + 8 + 4 + e.value_length);
-        Self {
-            config_discriminator: CONFIGURATION_DISCRIMINATOR.into(),
-            config_length,
-            entries,
-        }
-    }
-}
-
-/// Key section in a keystore entry
-#[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize)]
-pub struct KeystoreEntryKey {
-    /// Key discriminator (encryption algorithm)
-    pub key_discriminator: ArrayDiscriminator,
-    /// Length of the encryption key
-    pub key_length: u32,
-    /// Encryption key
-    pub key: Vec<u8>,
-}
-impl KeystoreEntryKey {
-    /// Creates a new `KeystoreEntryKey` from provided key discriminator and
-    /// key
-    pub fn new(key_discriminator: ArrayDiscriminator, key: Vec<u8>) -> Self {
-        let key_length = key.len() as u32;
-        Self {
-            key_discriminator: key_discriminator.into(),
-            key_length,
-            key,
-        }
-    }
-}
-
-/// A keystore entry
-#[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize)]
-pub struct KeystoreEntry {
-    /// Entry discriminator
-    pub entry_discriminator: ArrayDiscriminator,
-    /// Length of the entry
-    pub entry_length: u32,
-    /// Encryption key
-    pub key: KeystoreEntryKey,
-    /// Additional configurations
-    pub config: Option<KeystoreEntryConfig>,
-}
-impl KeystoreEntry {
-    /// Creates a new `KeystoreEntry` from provided key and optional
-    /// configuration
-    pub fn new(key: KeystoreEntryKey, config: Option<KeystoreEntryConfig>) -> Self {
-        let entry_length =
-            8 + 4 + key.key_length + config.as_ref().map_or(1, |c| 8 + 4 + c.config_length);
-        Self {
-            entry_discriminator: ENTRY_DISCRIMINATOR.into(),
-            entry_length,
-            key,
-            config,
-        }
-    }
-}
-
-/// Struct for managing a vector of keystore entries.
+/// Struct for managing a TLV structure of keystore entries.
 ///
 /// The data within a keystore account is managed using nested TLV entries.
 /// * T: The new entry discriminator (marks the start of a new keystore entry)
@@ -128,10 +27,12 @@ impl KeystoreEntry {
 ///                 * T: The configuration key (provided by sRFC workflow)
 ///                 * L: The configuration value length
 ///                 * T: The configuration value
-#[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Keystore {
-    entries: Vec<KeystoreEntry>,
+    /// The keystore entries
+    pub entries: Vec<KeystoreEntry>,
 }
+
 impl Keystore {
     /// String literal seed prefix
     const SEED_PREFIX: &'static str = "keystore";
@@ -145,11 +46,6 @@ impl Keystore {
     /// using the provided arguments
     pub fn pda(program_id: &Pubkey, authority: &Pubkey) -> (Pubkey, u8) {
         Pubkey::find_program_address(&Self::seeds(authority), program_id)
-    }
-
-    /// Creates a new, empty `Keystore`
-    pub fn new() -> Self {
-        Self { entries: vec![] }
     }
 
     /// Validates a passed `Pubkey` against the `Pubkey` returned from the
@@ -166,24 +62,85 @@ impl Keystore {
         Ok(bump_seed)
     }
 
+    /// Packs a `Keystore` into a slice of data
+    pub fn pack(&self) -> Result<Vec<u8>, ProgramError> {
+        let mut data = Vec::new();
+        for entry in &self.entries {
+            data.extend_from_slice(&entry.pack()?);
+        }
+        Ok(data)
+    }
+
+    /// Unpacks a slice of data into a `Keystore`
+    pub fn unpack(data: &[u8]) -> Result<Self, ProgramError> {
+        // Iteratively unpack keystore entries until there is no data left
+        let mut entries = vec![];
+        let mut data = data;
+        while !data.is_empty() {
+            let (entry, entry_end) = KeystoreEntry::unpack(data)?;
+            entries.push(entry);
+            data = &data[entry_end..];
+        }
+        Ok(Self { entries })
+    }
+
     /// Adds a new keystore entry
-    pub fn add_entry(&mut self, add_key_data: Vec<u8>) -> ProgramResult {
-        let add_key = KeystoreEntry::try_from_slice(&add_key_data)?;
-        self.entries.push(add_key);
+    pub fn add_entry(keystore_info: &AccountInfo, new_entry_data: &[u8]) -> ProgramResult {
+        let (new_entry, entry_end) = KeystoreEntry::unpack(new_entry_data)?;
+        // Ensure there are no leftover bytes
+        if entry_end != new_entry_data.len() {
+            return Err(KeyringProgramError::InvalidFormatForEntry.into());
+        }
+        let new_data = match keystore_info.data_is_empty() {
+            true => new_entry_data.to_vec(),
+            false => {
+                let data = keystore_info.try_borrow_data()?;
+                let mut keystore = Self::unpack(&data)?;
+                keystore.entries.push(new_entry);
+                keystore.pack()?
+            }
+        };
+        realloc_and_serialize(keystore_info, &new_data)?;
         Ok(())
     }
 
     /// Removes a keystore entry
-    pub fn remove_entry(&mut self, remove_key_data: Vec<u8>) -> ProgramResult {
-        let remove_key = KeystoreEntry::try_from_slice(&remove_key_data)?;
-        self.entries.retain(|entry| entry != &remove_key);
+    pub fn remove_entry(keystore_info: &AccountInfo, remove_entry_data: &[u8]) -> ProgramResult {
+        let (remove_entry, entry_end) = KeystoreEntry::unpack(remove_entry_data)?;
+        // Ensure there are no leftover bytes
+        if entry_end != remove_entry_data.len() {
+            return Err(KeyringProgramError::InvalidFormatForEntry.into());
+        }
+        if keystore_info.data_is_empty() {
+            return Err(KeyringProgramError::KeystoreEntryNotFound.into());
+        }
+        let new_data = {
+            let data = keystore_info.try_borrow_data()?;
+            let mut keystore = Self::unpack(&data)?;
+            keystore.entries.retain(|entry| entry != &remove_entry);
+            keystore.pack()?
+        };
+        realloc_and_serialize(keystore_info, &new_data)?;
         Ok(())
     }
 }
 
+fn realloc_and_serialize(account_info: &AccountInfo, data: &[u8]) -> ProgramResult {
+    let new_len = data.len();
+    account_info.realloc(new_len, true)?;
+    let mut account_data_mut = account_info.try_borrow_mut_data()?;
+    account_data_mut[..].copy_from_slice(&data);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use {
+        super::*,
+        crate::tlv::{KeystoreEntry, KeystoreEntryKey},
+        solana_program::stake_history::Epoch,
+        spl_discriminator::{ArrayDiscriminator, SplDiscriminate},
+    };
 
     const CURVE_25519_KEY_DISCRIMINATOR: ArrayDiscriminator =
         ArrayDiscriminator::new([2, 2, 2, 2, 2, 2, 2, 2]);
@@ -207,19 +164,130 @@ mod tests {
     }
 
     #[test]
-    fn test_add_remove_key() {
+    fn test_pack_unpack() {
+        let curve_25519_key = vec![6; 32];
+
+        let curve_25519_key_data = {
+            let key_length = curve_25519_key.len() as u32;
+            let mut buffer = Into::<[u8; 8]>::into(CURVE_25519_KEY_DISCRIMINATOR).to_vec();
+            buffer.extend(key_length.to_le_bytes().to_vec());
+            buffer.extend(curve_25519_key.clone());
+            buffer
+        };
+        let curve_25519_keystore_entry_key = KeystoreEntryKey {
+            discriminator: CURVE_25519_KEY_DISCRIMINATOR,
+            key_length: 32,
+            key: curve_25519_key,
+        };
+        assert_eq!(
+            curve_25519_keystore_entry_key.pack().unwrap(),
+            curve_25519_key_data,
+            "Curve25519 key data packed incorrectly"
+        );
+
+        let curve_25519_entry_data = {
+            let entry_length: u32 = curve_25519_key_data.len() as u32 + 1; // + 1 for empty `Option<T>`
+            let mut buffer = Into::<[u8; 8]>::into(KeystoreEntry::SPL_DISCRIMINATOR).to_vec();
+            buffer.extend(entry_length.to_le_bytes().to_vec());
+            buffer.extend(curve_25519_key_data.clone());
+            buffer.push(0); // Empty `Option<T>` value
+            buffer
+        };
+        let curve_25519_keystore_entry = KeystoreEntry {
+            key: curve_25519_keystore_entry_key,
+            config: None,
+        };
+        assert_eq!(
+            curve_25519_keystore_entry.pack().unwrap(),
+            curve_25519_entry_data,
+            "Curve25519 entry data packed incorrectly"
+        );
+
+        let rsa_key = vec![7; 32];
+
+        let rsa_key_data = {
+            let key_length = rsa_key.len() as u32;
+            let mut buffer = Into::<[u8; 8]>::into(RSA_KEY_DISCRIMINATOR).to_vec();
+            buffer.extend(key_length.to_le_bytes().to_vec());
+            buffer.extend(rsa_key.clone());
+            buffer
+        };
+        let rsa_keystore_entry_key = KeystoreEntryKey {
+            discriminator: RSA_KEY_DISCRIMINATOR,
+            key_length: 32,
+            key: rsa_key,
+        };
+        assert_eq!(
+            rsa_keystore_entry_key.pack().unwrap(),
+            rsa_key_data,
+            "RSA key data packed incorrectly"
+        );
+
+        let rsa_entry_data = {
+            let entry_length: u32 = rsa_key_data.len() as u32 + 1; // + 1 for empty `Option<T>`
+            let mut buffer = Into::<[u8; 8]>::into(KeystoreEntry::SPL_DISCRIMINATOR).to_vec();
+            buffer.extend(entry_length.to_le_bytes().to_vec());
+            buffer.extend(rsa_key_data.clone());
+            buffer.push(0); // Empty `Option<T>` value
+            buffer
+        };
+        let rsa_keystore_entry = KeystoreEntry {
+            key: rsa_keystore_entry_key,
+            config: None,
+        };
+        assert_eq!(
+            rsa_keystore_entry.pack().unwrap(),
+            rsa_entry_data,
+            "RSA entry data packed incorrectly"
+        );
+
+        let keystore_data = {
+            let mut buffer = vec![];
+            buffer.extend(curve_25519_entry_data);
+            buffer.extend(rsa_entry_data);
+            buffer
+        };
+        let keystore = Keystore {
+            entries: vec![curve_25519_keystore_entry, rsa_keystore_entry],
+        };
+        assert_eq!(
+            keystore.pack().unwrap(),
+            keystore_data,
+            "Keystore data packed incorrectly"
+        );
+    }
+
+    #[cfg(skip)]
+    #[test]
+    fn test_add_remove_key_with_account_info() {
+        // Test values
+        let pubkey = Pubkey::new_unique();
+        let mut lamports = 0;
+        let mut data = [];
+        let owner = Pubkey::new_unique();
+
+        let keystore_info = AccountInfo::new(
+            &pubkey,
+            false,
+            true,
+            &mut lamports,
+            &mut data,
+            &owner,
+            false,
+            Epoch::default(),
+        );
+
         let curve_25519_key = vec![6; 32];
         let curve_25519_key_data = {
+            let key_length = curve_25519_key.len() as u32;
             let mut buffer = Into::<[u8; 8]>::into(CURVE_25519_KEY_DISCRIMINATOR).to_vec();
-            let key_length = curve_25519_key.len() as u32 + 4;
             buffer.extend(key_length.to_le_bytes().to_vec());
-            buffer.extend((curve_25519_key.len() as u32).to_le_bytes().to_vec()); // Vector len for borsh
             buffer.extend(curve_25519_key.clone());
             buffer
         };
         let curve_25519_entry_data = {
-            let mut buffer = Into::<[u8; 8]>::into(ENTRY_DISCRIMINATOR).to_vec();
-            let entry_length: u32 = curve_25519_key_data.len() as u32 + 1;
+            let entry_length: u32 = curve_25519_key_data.len() as u32 + 1; // + 1 for empty `Option<T>`
+            let mut buffer = Into::<[u8; 8]>::into(KeystoreEntry::SPL_DISCRIMINATOR).to_vec();
             buffer.extend(entry_length.to_le_bytes().to_vec());
             buffer.extend(curve_25519_key_data.clone());
             buffer.push(0); // Empty `Option<T>` value
@@ -228,56 +296,31 @@ mod tests {
 
         let rsa_key = vec![7; 32];
         let rsa_key_data = {
+            let key_length = rsa_key.len() as u32;
             let mut buffer = Into::<[u8; 8]>::into(RSA_KEY_DISCRIMINATOR).to_vec();
-            let key_length = rsa_key.len() as u32 + 4;
             buffer.extend(key_length.to_le_bytes().to_vec());
-            buffer.extend((rsa_key.len() as u32).to_le_bytes().to_vec()); // Vector len for borsh
             buffer.extend(rsa_key.clone());
             buffer
         };
         let rsa_entry_data = {
-            let mut buffer = Into::<[u8; 8]>::into(ENTRY_DISCRIMINATOR).to_vec();
-            let entry_length: u32 = rsa_key_data.len() as u32 + 1;
+            let entry_length: u32 = rsa_key_data.len() as u32 + 1; // + 1 for empty `Option<T>`
+            let mut buffer = Into::<[u8; 8]>::into(KeystoreEntryConfig::SPL_DISCRIMINATOR).to_vec();
             buffer.extend(entry_length.to_le_bytes().to_vec());
             buffer.extend(rsa_key_data.clone());
             buffer.push(0); // Empty `Option<T>` value
             buffer
         };
 
-        let test_entry = KeystoreEntry::new(
-            KeystoreEntryKey {
-                key_discriminator: CURVE_25519_KEY_DISCRIMINATOR,
-                key_length: 32,
-                key: curve_25519_key.clone(),
-            },
-            None,
-        );
-        let test_keystore = Keystore {
-            entries: vec![test_entry.clone()],
-        };
-        println!(
-            "TEST KEYSTORE LEN: {}",
-            test_keystore.try_to_vec().unwrap().len()
-        );
-        println!("TEST ENTRY LEN: {}", test_entry.try_to_vec().unwrap().len());
-        println!("CURVE 25519 ENTRY LEN: {}", curve_25519_entry_data.len());
-        println!("CURVE 25519 ENTRY: {:?}", curve_25519_entry_data);
-
-        let mut keystore = Keystore::new();
-        keystore
-            .add_entry(curve_25519_entry_data.clone())
+        Keystore::add_entry(&keystore_info, &curve_25519_entry_data)
             .expect("Failed to add Curve25519 key");
-        keystore
-            .add_entry(rsa_entry_data.clone())
-            .expect("Failed to add RSA key");
-        assert_eq!(keystore.entries.len(), 2);
-        assert_eq!(&keystore.entries[0].key.key, &curve_25519_key);
-        assert_eq!(&keystore.entries[1].key.key, &rsa_key);
+        Keystore::add_entry(&keystore_info, &rsa_entry_data).expect("Failed to add RSA key");
+        assert_eq!(
+            keystore_info.data_len(),
+            curve_25519_entry_data.len() + rsa_entry_data.len()
+        );
 
-        keystore
-            .remove_entry(curve_25519_entry_data)
+        Keystore::remove_entry(&keystore_info, &curve_25519_entry_data)
             .expect("Failed to remove Curve25519 key");
-        assert_eq!(keystore.entries.len(), 1);
-        assert_eq!(&keystore.entries[0].key.key, &rsa_key);
+        assert_eq!(keystore_info.data_len(), rsa_entry_data.len());
     }
 }

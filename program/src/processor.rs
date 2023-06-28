@@ -2,7 +2,6 @@
 
 use {
     crate::{instruction::KeyringProgramInstruction, state::Keystore},
-    borsh::{BorshDeserialize, BorshSerialize},
     solana_program::{
         account_info::{next_account_info, AccountInfo},
         entrypoint::ProgramResult,
@@ -34,11 +33,6 @@ pub fn process_create_keystore(program_id: &Pubkey, accounts: &[AccountInfo]) ->
         Keystore::check_pda(program_id, authority_info.key, keystore_info.key)?
     };
 
-    let keystore = Keystore::new();
-    let keystore_data = keystore.try_to_vec()?;
-    let keystore_data_len = keystore_data.len();
-
-    let lamports = Rent::default().minimum_balance(keystore_data_len);
     let mut signer_seeds = Keystore::seeds(authority_info.key);
     let bump_signer_seed = [bump_seed];
     signer_seeds.push(&bump_signer_seed);
@@ -47,15 +41,13 @@ pub fn process_create_keystore(program_id: &Pubkey, accounts: &[AccountInfo]) ->
         &system_instruction::create_account(
             authority_info.key,
             keystore_info.key,
-            lamports,
-            keystore_data_len as u64,
+            Rent::default().minimum_balance(0),
+            0u64,
             program_id,
         ),
         &[authority_info.clone(), keystore_info.clone()],
         &[&signer_seeds],
     )?;
-
-    keystore_data.serialize(&mut &mut keystore_info.try_borrow_mut_data()?[..])?;
 
     Ok(())
 }
@@ -76,10 +68,7 @@ pub fn process_add_entry(
         check_authority(authority_info)?;
     }
 
-    let mut keystore = Keystore::try_from_slice(&keystore_info.try_borrow_data()?)?;
-    keystore.add_entry(add_entry_data)?;
-    keystore_info.realloc(keystore.try_to_vec()?.len(), true)?;
-    keystore.serialize(&mut &mut keystore_info.try_borrow_mut_data()?[..])?;
+    Keystore::add_entry(&keystore_info, &add_entry_data)?;
 
     Ok(())
 }
@@ -100,10 +89,7 @@ pub fn process_remove_entry(
         check_authority(authority_info)?;
     }
 
-    let mut keystore = Keystore::try_from_slice(&keystore_info.try_borrow_data()?)?;
-    keystore.remove_entry(remove_entry_data)?;
-    keystore_info.realloc(keystore.try_to_vec()?.len(), true)?;
-    keystore.serialize(&mut &mut keystore_info.try_borrow_mut_data()?[..])?;
+    Keystore::remove_entry(&keystore_info, &remove_entry_data)?;
 
     Ok(())
 }
