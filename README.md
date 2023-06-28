@@ -26,6 +26,8 @@ A user's keystore is mapped to their wallet address with the following Program-D
 
 The data of a `KeystoreEntry` is structured in a **nested TLV structure**, which allows us to dynamically manage various types of keys and configs. ([see below section](#supporting-dynamic-encryption-algorithms))
 
+A particular encryption algorithm may require some additional configurations or parameters to perform encryption/decryption. These can be specified in the `(Additional configurations)` section in the structure layout below.
+
 The nested TLV structure is formatted as follows:
 
 ```text
@@ -86,4 +88,4 @@ When seeking to introduce support for a new encryption algorithm in the Keyring 
 - A unique 8-byte discriminator for the encryption algorithm (the key discriminator)
 - If configurations are required to use this encryption algorithm: An explicit data structure outlining all required configurations
 
-⚠️ Note: I would like to make this something like a publicly-hosted JSON that we can change without having to push any code changes, on or off chain.
+⚠️ Note: I would like to make this something like a publicly-hosted JSON that we can change without having to push any code changes, on- or off-chain.
