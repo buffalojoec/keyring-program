@@ -1,22 +1,7 @@
 import * as borsh from "borsh";
 import { Buffer } from "buffer";
 import { PublicKey, TransactionInstruction } from "@solana/web3.js";
-
-/**
- * Get the user's keystore PDA
- * @param programId The Keyring Program ID
- * @param authority The user authority
- * @returns The user's keystore address and bump seed
- */
-export function getKeystoreAddress(
-  programId: PublicKey,
-  authority: PublicKey
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from("keystore"), authority.toBuffer()],
-    programId
-  );
-}
+import { PROGRAM_ID, getKeystoreAddress } from "./state";
 
 /**
  * The instruction discriminators for the Keyring Program
@@ -55,20 +40,17 @@ export class CreateKeystoreInstruction {
    * @param authority The user authority
    * @returns The transaction instruction
    */
-  instruction(
-    programId: PublicKey,
-    authority: PublicKey
-  ): TransactionInstruction {
+  instruction(authority: PublicKey): TransactionInstruction {
     const keys = [
       {
-        pubkey: getKeystoreAddress(programId, authority)[0],
+        pubkey: getKeystoreAddress(authority)[0],
         isSigner: false,
         isWritable: true,
       },
       { pubkey: authority, isSigner: true, isWritable: false },
     ];
     return new TransactionInstruction({
-      programId,
+      programId: PROGRAM_ID,
       keys,
       data: this.toBuffer(),
     });
@@ -113,20 +95,17 @@ export class AddEntryInstruction {
    * @param authority The user authority
    * @returns The transaction instruction
    */
-  instruction(
-    programId: PublicKey,
-    authority: PublicKey
-  ): TransactionInstruction {
+  instruction(authority: PublicKey): TransactionInstruction {
     const keys = [
       {
-        pubkey: getKeystoreAddress(programId, authority)[0],
+        pubkey: getKeystoreAddress(authority)[0],
         isSigner: false,
         isWritable: true,
       },
       { pubkey: authority, isSigner: true, isWritable: false },
     ];
     return new TransactionInstruction({
-      programId,
+      programId: PROGRAM_ID,
       keys,
       data: this.toBuffer(),
     });
@@ -171,20 +150,17 @@ export class RemoveEntryInstruction {
    * @param authority The user authority
    * @returns The transaction instruction
    */
-  instruction(
-    programId: PublicKey,
-    authority: PublicKey
-  ): TransactionInstruction {
+  instruction(authority: PublicKey): TransactionInstruction {
     const keys = [
       {
-        pubkey: getKeystoreAddress(programId, authority)[0],
+        pubkey: getKeystoreAddress(authority)[0],
         isSigner: false,
         isWritable: true,
       },
       { pubkey: authority, isSigner: true, isWritable: false },
     ];
     return new TransactionInstruction({
-      programId,
+      programId: PROGRAM_ID,
       keys,
       data: this.toBuffer(),
     });

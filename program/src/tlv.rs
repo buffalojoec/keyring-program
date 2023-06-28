@@ -20,6 +20,11 @@ pub struct KeystoreEntryConfigEntry {
     pub value: Vec<u8>,
 }
 impl KeystoreEntryConfigEntry {
+    /// Returns the length of a `KeystoreEntryConfigEntry`
+    pub fn data_len(&self) -> usize {
+        12 + self.value_length as usize
+    }
+
     /// Packs a `KeystoreEntryConfigEntry` into a vector of bytes
     pub fn pack(&self) -> Result<Vec<u8>, ProgramError> {
         let mut data = Vec::new();
@@ -74,6 +79,15 @@ impl KeystoreEntryConfigEntry {
 #[discriminator_hash_input("spl_keyring_program:keystore_entry:configuration")]
 pub struct KeystoreEntryConfig(Vec<KeystoreEntryConfigEntry>);
 impl KeystoreEntryConfig {
+    /// Returns the length of a `KeystoreEntryConfig`
+    pub fn data_len(&self) -> usize {
+        let mut len = 12;
+        for config_entry in &self.0 {
+            len += config_entry.data_len();
+        }
+        len
+    }
+
     /// Packs a `KeystoreEntryConfig` into a vector of bytes
     pub fn pack(&self) -> Result<Vec<u8>, ProgramError> {
         let mut data = Vec::new();
@@ -85,16 +99,13 @@ impl KeystoreEntryConfig {
 
     /// Unpacks a slice of data into a `KeystoreEntryConfig`
     pub fn unpack(data: &[u8]) -> Result<Option<Self>, ProgramError> {
-        println!("  config_length: {}", data.len());
         // If the first byte is 0, there is no config data
         if data[0] == 0 {
-            println!("the first byte is 0, there is no config data");
             return Ok(None);
         }
         // If the data isn't at least 12 bytes long, it's invalid
         // (discriminator, length, config)
         if data[0] != 0 && data.len() < 12 {
-            println!("the data isn't at least 12 bytes long, it's invalid");
             return Err(KeyringProgramError::InvalidFormatForConfig.into());
         }
         if &data[0..8] != Self::SPL_DISCRIMINATOR_SLICE {
@@ -128,10 +139,11 @@ pub struct KeystoreEntryKey {
     pub key: Vec<u8>,
 }
 impl KeystoreEntryKey {
-    /// Returns the length of the key data
+    /// Returns the length of a `KeystoreEntryKey`
     pub fn data_len(&self) -> usize {
-        8 + 4 + self.key.len()
+        12 + self.key.len()
     }
+
     /// Packs a `KeystoreEntryKey` into a vector of bytes
     pub fn pack(&self) -> Result<Vec<u8>, ProgramError> {
         let mut data = Vec::new();
@@ -184,23 +196,30 @@ impl KeystoreEntry {
         let mut data = Vec::new();
         // Pack the entry discriminator
         data.extend_from_slice(Self::SPL_DISCRIMINATOR_SLICE);
-        // Get the length of the entry and it's config
-        let (entry_length, config_discriminator, config_data) = match &self.config {
-            Some(config) => (
-                self.key.data_len() + config.0.len(),
-                KeystoreEntryConfig::SPL_DISCRIMINATOR_SLICE,
-                config.pack()?,
-            ),
-            None => (self.key.data_len() + 1, [0u8].as_slice(), Vec::<u8>::new()),
+        // Get the length of the key and its end index
+        let key_length = self.key.key_length;
+        let key_end: usize = 12 + key_length as usize;
+        // Check if the entry has additional configurations
+        match &self.config {
+            Some(config) => {
+                // Pack the entry length
+                let entry_length = key_end + config.data_len();
+                data.extend_from_slice(&(entry_length as u32).to_le_bytes());
+                // Pack the key
+                data.extend_from_slice(&self.key.pack()?);
+                // Pack the config
+                data.extend_from_slice(&config.pack()?);
+            }
+            None => {
+                // Pack the entry length
+                let entry_length = key_end + 1;
+                data.extend_from_slice(&(entry_length as u32).to_le_bytes());
+                // Pack the key
+                data.extend_from_slice(&self.key.pack()?);
+                // Pack a single zero
+                data.push(0);
+            }
         };
-        // Pack the length of the entry
-        data.extend_from_slice(&(entry_length as u32).to_le_bytes());
-        // Pack the key data
-        data.extend_from_slice(&self.key.pack()?);
-        // Pack the config discriminator
-        data.extend_from_slice(config_discriminator);
-        // Pack the config
-        data.extend_from_slice(&config_data);
         Ok(data)
     }
 

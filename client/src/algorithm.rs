@@ -18,50 +18,64 @@ pub struct NoConfigurations;
 
 /// Curve25519 encryption algorithm
 #[derive(Clone, Debug, Default, PartialEq, SplDiscriminate)]
-#[discriminator_hash_input("key:curve25519")]
-pub struct Curve25519;
+#[discriminator_hash_input("spl_keyring_program:key:Curve25519")]
+pub struct Curve25519 {
+    key: [u8; Self::KEY_LENGTH],
+}
+impl Curve25519 {
+    /// Create a new instance of Curve25519
+    pub fn new(key: [u8; Self::KEY_LENGTH]) -> Self {
+        Self { key }
+    }
+}
 
 impl EncryptionAlgorithm for Curve25519 {
     const KEY_LENGTH: usize = 32;
     type Configurations = NoConfigurations;
 }
 
-/// X25519 encryption algorithm
+/// RSA encryption algorithm
 #[derive(Clone, Debug, Default, PartialEq, SplDiscriminate)]
-#[discriminator_hash_input("key:x25519")]
-pub struct X25519;
+#[discriminator_hash_input("spl_keyring_program:key:RSA")]
+pub struct RSA {
+    key: [u8; Self::KEY_LENGTH],
+}
+impl RSA {
+    /// Create a new instance of RSA
+    pub fn new(key: [u8; Self::KEY_LENGTH]) -> Self {
+        Self { key }
+    }
+}
 
-impl EncryptionAlgorithm for X25519 {
+impl EncryptionAlgorithm for RSA {
     const KEY_LENGTH: usize = 32;
     type Configurations = NoConfigurations;
 }
 
-/// Ed25519 encryption algorithm
+/// ComplexAlgorithm encryption algorithm
 #[derive(Clone, Debug, Default, PartialEq, SplDiscriminate)]
-#[discriminator_hash_input("key:ed25519")]
-pub struct Ed25519;
-
-impl EncryptionAlgorithm for Ed25519 {
-    const KEY_LENGTH: usize = 32;
-    type Configurations = NoConfigurations;
+#[discriminator_hash_input("spl_keyring_program:key:ComplexAlgorithm")]
+pub struct ComplexAlgorithm {
+    key: [u8; Self::KEY_LENGTH],
+}
+impl ComplexAlgorithm {
+    /// Create a new instance of ComplexAlgorithm
+    pub fn new(key: [u8; Self::KEY_LENGTH]) -> Self {
+        Self { key }
+    }
 }
 
-/// Cha-Cha20-Poly1305 encryption algorithm
-#[derive(Clone, Debug, Default, PartialEq, SplDiscriminate)]
-#[discriminator_hash_input("key:cha-cha20-poly1305")]
-pub struct ChaCha20Poly1305;
-
-impl EncryptionAlgorithm for ChaCha20Poly1305 {
+impl EncryptionAlgorithm for ComplexAlgorithm {
     const KEY_LENGTH: usize = 32;
-    type Configurations = ChaCha20Poly1305Configurations;
+    type Configurations = ComplexAlgorithmConfigurations;
 }
 
-/// Cha-Cha20-Poly1305 configurations
+/// ComplexAlgorithm configurations
 #[derive(Clone, Debug, Default, PartialEq, SplDiscriminate)]
-#[discriminator_hash_input("configurations:cha-cha20-poly1305")]
-pub struct ChaCha20Poly1305Configurations {
+#[discriminator_hash_input("spl_keyring_program:configuration:ComplexAlgorithm")]
+pub struct ComplexAlgorithmConfigurations {
     /// The nonce used for encryption
     pub nonce: [u8; 12],
-    /// The associated data used for encryption
+    /// The additional authenticated data
     pub aad: [u8; 12],
 }

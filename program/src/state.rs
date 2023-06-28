@@ -92,7 +92,10 @@ impl Keystore {
             return Err(KeyringProgramError::InvalidFormatForEntry.into());
         }
         let new_data = match keystore_info.data_is_empty() {
-            true => new_entry_data.to_vec(),
+            true => {
+                println!("EMPTY");
+                new_entry_data.to_vec()
+            }
             false => {
                 let data = keystore_info.try_borrow_data()?;
                 let mut keystore = Self::unpack(&data)?;
@@ -100,7 +103,11 @@ impl Keystore {
                 keystore.pack()?
             }
         };
-        realloc_and_serialize(keystore_info, &new_data)?;
+        // realloc_and_serialize(keystore_info, &new_data)?;
+        let new_len = new_data.len();
+        keystore_info.realloc(new_len, true)?;
+        let mut account_data_mut = keystore_info.try_borrow_mut_data()?;
+        account_data_mut[..].copy_from_slice(&new_data);
         Ok(())
     }
 
@@ -147,6 +154,52 @@ mod tests {
     const RSA_KEY_DISCRIMINATOR: ArrayDiscriminator =
         ArrayDiscriminator::new([3, 3, 3, 3, 3, 3, 3, 3]);
 
+    /// Builds a buffer by hand for a test curve25519 key entry
+    fn get_curve25519_data() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+        let curve_25519_key = vec![6; 32];
+        let curve_25519_key_data = {
+            let key_length = curve_25519_key.len() as u32;
+            let mut buffer = Into::<[u8; 8]>::into(CURVE_25519_KEY_DISCRIMINATOR).to_vec();
+            buffer.extend(key_length.to_le_bytes().to_vec());
+            buffer.extend(curve_25519_key.clone());
+            buffer
+        };
+        let curve_25519_entry_data = {
+            let entry_length: u32 = curve_25519_key_data.len() as u32 + 1; // + 1 for empty `Option<T>`
+            let mut buffer = Into::<[u8; 8]>::into(KeystoreEntry::SPL_DISCRIMINATOR).to_vec();
+            buffer.extend(entry_length.to_le_bytes().to_vec());
+            buffer.extend(curve_25519_key_data.clone());
+            buffer.push(0); // Empty `Option<T>` value
+            buffer
+        };
+        (
+            curve_25519_key,
+            curve_25519_key_data,
+            curve_25519_entry_data,
+        )
+    }
+
+    /// Builds a buffer by hand for a test RSA key entry
+    fn get_rsa_data() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+        let rsa_key = vec![7; 32];
+        let rsa_key_data = {
+            let key_length = rsa_key.len() as u32;
+            let mut buffer = Into::<[u8; 8]>::into(RSA_KEY_DISCRIMINATOR).to_vec();
+            buffer.extend(key_length.to_le_bytes().to_vec());
+            buffer.extend(rsa_key.clone());
+            buffer
+        };
+        let rsa_entry_data = {
+            let entry_length: u32 = rsa_key_data.len() as u32 + 1; // + 1 for empty `Option<T>`
+            let mut buffer = Into::<[u8; 8]>::into(KeystoreEntry::SPL_DISCRIMINATOR).to_vec();
+            buffer.extend(entry_length.to_le_bytes().to_vec());
+            buffer.extend(rsa_key_data.clone());
+            buffer.push(0); // Empty `Option<T>` value
+            buffer
+        };
+        (rsa_key, rsa_key_data, rsa_entry_data)
+    }
+
     #[test]
     fn test_seeds() {
         let program_id = Pubkey::new_unique();
@@ -165,15 +218,8 @@ mod tests {
 
     #[test]
     fn test_pack_unpack() {
-        let curve_25519_key = vec![6; 32];
+        let (curve_25519_key, curve_25519_key_data, curve_25519_entry_data) = get_curve25519_data();
 
-        let curve_25519_key_data = {
-            let key_length = curve_25519_key.len() as u32;
-            let mut buffer = Into::<[u8; 8]>::into(CURVE_25519_KEY_DISCRIMINATOR).to_vec();
-            buffer.extend(key_length.to_le_bytes().to_vec());
-            buffer.extend(curve_25519_key.clone());
-            buffer
-        };
         let curve_25519_keystore_entry_key = KeystoreEntryKey {
             discriminator: CURVE_25519_KEY_DISCRIMINATOR,
             key_length: 32,
@@ -184,15 +230,6 @@ mod tests {
             curve_25519_key_data,
             "Curve25519 key data packed incorrectly"
         );
-
-        let curve_25519_entry_data = {
-            let entry_length: u32 = curve_25519_key_data.len() as u32 + 1; // + 1 for empty `Option<T>`
-            let mut buffer = Into::<[u8; 8]>::into(KeystoreEntry::SPL_DISCRIMINATOR).to_vec();
-            buffer.extend(entry_length.to_le_bytes().to_vec());
-            buffer.extend(curve_25519_key_data.clone());
-            buffer.push(0); // Empty `Option<T>` value
-            buffer
-        };
         let curve_25519_keystore_entry = KeystoreEntry {
             key: curve_25519_keystore_entry_key,
             config: None,
@@ -203,15 +240,8 @@ mod tests {
             "Curve25519 entry data packed incorrectly"
         );
 
-        let rsa_key = vec![7; 32];
+        let (rsa_key, rsa_key_data, rsa_entry_data) = get_rsa_data();
 
-        let rsa_key_data = {
-            let key_length = rsa_key.len() as u32;
-            let mut buffer = Into::<[u8; 8]>::into(RSA_KEY_DISCRIMINATOR).to_vec();
-            buffer.extend(key_length.to_le_bytes().to_vec());
-            buffer.extend(rsa_key.clone());
-            buffer
-        };
         let rsa_keystore_entry_key = KeystoreEntryKey {
             discriminator: RSA_KEY_DISCRIMINATOR,
             key_length: 32,
@@ -223,14 +253,6 @@ mod tests {
             "RSA key data packed incorrectly"
         );
 
-        let rsa_entry_data = {
-            let entry_length: u32 = rsa_key_data.len() as u32 + 1; // + 1 for empty `Option<T>`
-            let mut buffer = Into::<[u8; 8]>::into(KeystoreEntry::SPL_DISCRIMINATOR).to_vec();
-            buffer.extend(entry_length.to_le_bytes().to_vec());
-            buffer.extend(rsa_key_data.clone());
-            buffer.push(0); // Empty `Option<T>` value
-            buffer
-        };
         let rsa_keystore_entry = KeystoreEntry {
             key: rsa_keystore_entry_key,
             config: None,
@@ -257,7 +279,6 @@ mod tests {
         );
     }
 
-    #[cfg(skip)]
     #[test]
     fn test_add_remove_key_with_account_info() {
         // Test values
@@ -277,39 +298,9 @@ mod tests {
             Epoch::default(),
         );
 
-        let curve_25519_key = vec![6; 32];
-        let curve_25519_key_data = {
-            let key_length = curve_25519_key.len() as u32;
-            let mut buffer = Into::<[u8; 8]>::into(CURVE_25519_KEY_DISCRIMINATOR).to_vec();
-            buffer.extend(key_length.to_le_bytes().to_vec());
-            buffer.extend(curve_25519_key.clone());
-            buffer
-        };
-        let curve_25519_entry_data = {
-            let entry_length: u32 = curve_25519_key_data.len() as u32 + 1; // + 1 for empty `Option<T>`
-            let mut buffer = Into::<[u8; 8]>::into(KeystoreEntry::SPL_DISCRIMINATOR).to_vec();
-            buffer.extend(entry_length.to_le_bytes().to_vec());
-            buffer.extend(curve_25519_key_data.clone());
-            buffer.push(0); // Empty `Option<T>` value
-            buffer
-        };
-
-        let rsa_key = vec![7; 32];
-        let rsa_key_data = {
-            let key_length = rsa_key.len() as u32;
-            let mut buffer = Into::<[u8; 8]>::into(RSA_KEY_DISCRIMINATOR).to_vec();
-            buffer.extend(key_length.to_le_bytes().to_vec());
-            buffer.extend(rsa_key.clone());
-            buffer
-        };
-        let rsa_entry_data = {
-            let entry_length: u32 = rsa_key_data.len() as u32 + 1; // + 1 for empty `Option<T>`
-            let mut buffer = Into::<[u8; 8]>::into(KeystoreEntryConfig::SPL_DISCRIMINATOR).to_vec();
-            buffer.extend(entry_length.to_le_bytes().to_vec());
-            buffer.extend(rsa_key_data.clone());
-            buffer.push(0); // Empty `Option<T>` value
-            buffer
-        };
+        let (_curve_25519_key, _curve_25519_key_data, curve_25519_entry_data) =
+            get_curve25519_data();
+        let (_rsa_key, _rsa_key_data, rsa_entry_data) = get_rsa_data();
 
         Keystore::add_entry(&keystore_info, &curve_25519_entry_data)
             .expect("Failed to add Curve25519 key");

@@ -5,14 +5,17 @@ import {
   Connection,
   Keypair,
   LAMPORTS_PER_SOL,
-  PublicKey,
   TransactionInstruction,
 } from "@solana/web3.js";
 import {
   AddEntryInstruction,
   CreateKeystoreInstruction,
+  Curve25519,
+  Keystore,
   RemoveEntryInstruction,
+  RSA,
   buildTransactionV0,
+  getKeystore,
   getKeystoreAddress,
 } from "../src";
 
@@ -22,7 +25,9 @@ import {
 describe("Keyring Program Tests", async () => {
   const connection = new Connection("http://localhost:8899", "confirmed");
   const authority = Keypair.generate();
-  const programId = new PublicKey("");
+
+  const testCurve25519Keypair = Keypair.generate();
+  const testRSAKeypair = Keypair.generate();
 
   /**
    * Sends a transaction with the provided instruction
@@ -42,19 +47,6 @@ describe("Keyring Program Tests", async () => {
   }
 
   /**
-   * Gets the keystore account and checks that it exists
-   */
-  async function getKeystoreChecked(): Promise<AccountInfo<Buffer>> {
-    const keystoreAddress = getKeystoreAddress(
-      programId,
-      authority.publicKey
-    )[0];
-    const keystoreAccount = await connection.getAccountInfo(keystoreAddress);
-    assert(keystoreAccount !== null, "Keystore account was null");
-    return keystoreAccount;
-  }
-
-  /**
    * Fund the authority
    */
   before(async () => {
@@ -66,53 +58,68 @@ describe("Keyring Program Tests", async () => {
    */
   it("Can create a keystore", async () => {
     const instruction = new CreateKeystoreInstruction().instruction(
-      programId,
       authority.publicKey
     );
     await sendKeystoreTestTransaction(instruction);
     // Check to make sure the keystore was created
-    await getKeystoreChecked();
+    await getKeystore(connection, authority.publicKey);
   });
 
   /**
    * Can add a key
    */
   it("Can add a key", async () => {
-    const newEntryData = Uint8Array.from([1, 2, 3, 4, 5]); // TODO
+    const newEntryData = new Curve25519(
+      testCurve25519Keypair.publicKey.toBuffer()
+    ).toBuffer();
     const instruction = new AddEntryInstruction(newEntryData).instruction(
-      programId,
       authority.publicKey
     );
     await sendKeystoreTestTransaction(instruction);
     // Check to make sure the key was added
-    const keystoreAccount = await getKeystoreChecked();
+    const keystore = await getKeystore(connection, authority.publicKey);
+    const mockKeystore = new Keystore([
+      new Curve25519(testCurve25519Keypair.publicKey.toBuffer()),
+    ]);
+    assert(keystore === mockKeystore, "Keystores do not match!");
   });
 
   /**
    * Can add another key
    */
   it("Can add another key", async () => {
-    const newEntryData = Uint8Array.from([1, 2, 3, 4, 5]); // TODO
+    const newEntryData = new RSA(
+      testRSAKeypair.publicKey.toBuffer()
+    ).toBuffer();
     const instruction = new AddEntryInstruction(newEntryData).instruction(
-      programId,
       authority.publicKey
     );
     await sendKeystoreTestTransaction(instruction);
     // Check to make sure the key was added
-    const keystoreAccount = await getKeystoreChecked();
+    const keystore = await getKeystore(connection, authority.publicKey);
+    const mockKeystore = new Keystore([
+      new Curve25519(testCurve25519Keypair.publicKey.toBuffer()),
+      new RSA(testRSAKeypair.publicKey.toBuffer()),
+    ]);
+    assert(keystore === mockKeystore, "Keystores do not match!");
   });
 
   /**
    * Can remove a key
    */
   it("Can remove a key", async () => {
-    const removeEntryData = Uint8Array.from([1, 2, 3, 4, 5]); // TODO
+    const removeEntryData = new Curve25519(
+      testCurve25519Keypair.publicKey.toBuffer()
+    ).toBuffer();
     const instruction = new RemoveEntryInstruction(removeEntryData).instruction(
-      programId,
       authority.publicKey
     );
     await sendKeystoreTestTransaction(instruction);
     // Check to make sure the key was removed
-    const keystoreAccount = await getKeystoreChecked();
+    const keystore = await getKeystore(connection, authority.publicKey);
+    const mockKeystore = new Keystore([
+      new RSA(testRSAKeypair.publicKey.toBuffer()),
+    ]);
+    assert(keystore === mockKeystore, "Keystores do not match!");
   });
 });

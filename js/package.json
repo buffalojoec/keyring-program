@@ -7,8 +7,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@solana/web3.js": "^1.77.3",
-    "borsh": "^0.7.0",
-    "buffer": "^6.0.3"
+    "borsh": "^0.7.0"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.1",
