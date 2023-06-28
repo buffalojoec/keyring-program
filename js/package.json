@@ -1,0 +1,22 @@
+{
+  "name": "spl-keyring-program-client-js",
+  "version": "0.0.1",
+  "description": "JavaScript client SDK for the Keyring Program",
+  "repository": "https://github.com/solana-labs/solana-program-library",
+  "author": "Solana Labs Maintainers <maintainers@solanalabs.com>",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@solana/web3.js": "^1.77.3",
+    "borsh": "^0.7.0",
+    "buffer": "^6.0.3"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.1",
+    "assert": "^2.0.0",
+    "ts-mocha": "^10.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "ts-mocha -t 1000000 tests/main.test.ts"
+  }
+}
