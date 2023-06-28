@@ -68,7 +68,7 @@ pub fn process_add_entry(
         check_authority(authority_info)?;
     }
 
-    Keystore::add_entry(&keystore_info, &add_entry_data)?;
+    Keystore::add_entry(keystore_info, &add_entry_data)?;
 
     Ok(())
 }
@@ -89,7 +89,7 @@ pub fn process_remove_entry(
         check_authority(authority_info)?;
     }
 
-    Keystore::remove_entry(&keystore_info, &remove_entry_data)?;
+    Keystore::remove_entry(keystore_info, &remove_entry_data)?;
 
     Ok(())
 }

@@ -23,7 +23,7 @@ impl KeystoreEntryConfigEntry {
     /// Packs a `KeystoreEntryConfigEntry` into a vector of bytes
     pub fn pack(&self) -> Result<Vec<u8>, ProgramError> {
         let mut data = Vec::new();
-        data.extend_from_slice(&self.key.as_slice());
+        data.extend_from_slice(self.key.as_slice());
         data.extend_from_slice(&self.value_length.to_le_bytes());
         data.extend_from_slice(&self.value);
         Ok(data)
@@ -135,7 +135,7 @@ impl KeystoreEntryKey {
     /// Packs a `KeystoreEntryKey` into a vector of bytes
     pub fn pack(&self) -> Result<Vec<u8>, ProgramError> {
         let mut data = Vec::new();
-        data.extend_from_slice(&self.discriminator.as_slice());
+        data.extend_from_slice(self.discriminator.as_slice());
         data.extend_from_slice(&self.key_length.to_le_bytes());
         data.extend_from_slice(&self.key);
         Ok(data)

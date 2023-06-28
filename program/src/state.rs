@@ -38,7 +38,7 @@ impl Keystore {
     const SEED_PREFIX: &'static str = "keystore";
 
     /// Returns the seeds for this account as a vector of slices
-    pub fn seeds<'s>(authority: &'s Pubkey) -> Vec<&'s [u8]> {
+    pub fn seeds(authority: &Pubkey) -> Vec<&[u8]> {
         vec![Self::SEED_PREFIX.as_bytes(), authority.as_ref()]
     }
 
@@ -129,7 +129,7 @@ fn realloc_and_serialize(account_info: &AccountInfo, data: &[u8]) -> ProgramResu
     let new_len = data.len();
     account_info.realloc(new_len, true)?;
     let mut account_data_mut = account_info.try_borrow_mut_data()?;
-    account_data_mut[..].copy_from_slice(&data);
+    account_data_mut[..].copy_from_slice(data);
     Ok(())
 }
 
