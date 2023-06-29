@@ -16,7 +16,6 @@ import {
   RSA,
   buildTransactionV0,
   getKeystore,
-  getKeystoreAddress,
 } from "../src";
 
 /**

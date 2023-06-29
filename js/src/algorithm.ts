@@ -33,6 +33,7 @@ export function fromEncryptionAlgorithmToBuffer(
   return Buffer.concat([
     Buffer.from(algorithm.keyDiscriminator),
     Buffer.from(Uint32Array.of(algorithm.keyLength)),
+    Buffer.from(algorithm.key),
     algorithm.config.toBuffer(),
   ]);
 }
@@ -198,20 +199,20 @@ export const COMPLEX_ALGORITHM_CONFIGURATION_DISCRIMINATOR = new Uint8Array([
 
 /**
  * Reads a keystore entry and converts it to one of the above recognized encryption algorithms
- * @param entry A keystore entry
+ * @param keystoreEntry A keystore entry
  * @returns An encryption algorithm
  */
 export function fromKeystoreEntrytoEncryptionAlgorithm(
-  entry: KeystoreEntry
+  keystoreEntry: KeystoreEntry
 ): EncryptionAlgorithm {
-  const keyDiscriminator = entry.key.discriminator;
-  const key = entry.key.key;
+  const keyDiscriminator = keystoreEntry.key.discriminator;
+  const key = keystoreEntry.key.key;
   if (keyDiscriminator === CURVE25519_DISCRIMINATOR) {
     return new Curve25519(key);
   } else if (keyDiscriminator === RSA_DISCRIMINATOR) {
     return new RSA(key);
   } else if (keyDiscriminator === COMPLEX_ALGORITHM_DISCRIMINATOR) {
-    const config = entry.config;
+    const config = keystoreEntry.config;
     if (!config) {
       throw new Error("Missing required config for ComplexAlgorithm");
     }
