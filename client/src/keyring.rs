@@ -3,8 +3,8 @@
 use {
     crate::error::KeyringError,
     solana_sdk::{
-        account::Account, account_info::AccountInfo, instruction::Instruction, pubkey::Pubkey,
-        signature::Keypair, signer::Signer, signers::Signers,
+        account::Account, instruction::Instruction, message::Message, pubkey::Pubkey,
+        signature::Keypair, signer::Signer, signers::Signers, transaction::Transaction,
     },
     spl_keyring_program::{state::Keystore, tlv::KeystoreEntry},
     spl_token_client::client::{ProgramClient, SendTransaction},
@@ -60,6 +60,42 @@ where
     }
 
     /// Construct a transaction from a list of instructions
+    async fn construct_tx<S: Signers>(
+        &self,
+        token_instructions: &[Instruction],
+        signing_keypairs: &S,
+    ) -> Result<Transaction, KeyringError> {
+        let mut instructions = vec![];
+        let payer_key = self.payer.pubkey();
+        let fee_payer = Some(&payer_key);
+
+        instructions.extend_from_slice(token_instructions);
+
+        let (message, blockhash) = {
+            let latest_blockhash = self
+                .client
+                .get_latest_blockhash()
+                .await
+                .map_err(KeyringError::Client)?;
+            (
+                Message::new_with_blockhash(&instructions, fee_payer, &latest_blockhash),
+                latest_blockhash,
+            )
+        };
+
+        let mut transaction = Transaction::new_unsigned(message);
+
+        transaction
+            .try_partial_sign(&vec![self.payer.clone()], blockhash)
+            .map_err(|error| KeyringError::Client(error.into()))?;
+        transaction
+            .try_partial_sign(signing_keypairs, blockhash)
+            .map_err(|error| KeyringError::Client(error.into()))?;
+
+        Ok(transaction)
+    }
+
+    /// Construct a transaction from a list of instructions
     pub async fn process_ixs<S: Signers>(
         &self,
         token_instructions: &[Instruction],
@@ -72,7 +108,9 @@ where
         self.client
             .send_transaction(&transaction)
             .await
-            .map_err(KeyringError::Client)
+            .map_err(KeyringError::Client)?;
+
+        Ok(())
     }
 
     /// Create a new keystore

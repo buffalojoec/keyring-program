@@ -84,7 +84,7 @@ async fn can_add_key() {
         .get_keystore_account(&authority.pubkey())
         .await
         .expect("Failed to fetch keystore account");
-    println!("Keystore data length: {}", keystore_account.data_len());
+    println!("Keystore data length: {}", keystore_account.data.len());
 
     // Check to make sure the key was added
     let keystore = keyring
@@ -123,7 +123,7 @@ async fn can_add_multiple_keys() {
         .get_keystore_account(&authority.pubkey())
         .await
         .expect("Failed to fetch keystore account");
-    println!("Keystore data length: {}", keystore_account.data_len());
+    println!("Keystore data length: {}", keystore_account.data.len());
 
     // Check to make sure the key was added
     let keystore = keyring
@@ -163,7 +163,7 @@ async fn can_remove_key() {
         .await
         .expect("Failed to fetch keystore account");
     println!("Added two keys to keystore");
-    println!("Keystore data length: {}", keystore_account.data_len());
+    println!("Keystore data length: {}", keystore_account.data.len());
 
     keyring
         .remove_entry(&authority, curve_entry_data)
@@ -176,7 +176,7 @@ async fn can_remove_key() {
         .await
         .expect("Failed to fetch keystore account");
     println!("Removed Curve25519 key from keystore");
-    println!("Keystore data length: {}", keystore_account.data_len());
+    println!("Keystore data length: {}", keystore_account.data.len());
 
     // Check to make sure the key was added
     let keystore = keyring

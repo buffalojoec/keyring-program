@@ -12,4 +12,4 @@ pub mod tlv;
 #[cfg(not(feature = "no-entrypoint"))]
 mod entrypoint;
 
-solana_program::declare_id!("GBvWerDWxo4yN8cJJU8CiGNhuK3WydCu19LcBRSL9ydX");
+solana_program::declare_id!("4HBknBczTrUDSATx3sE3aeaTPThxiPcRYQMuAojP9tE9");
