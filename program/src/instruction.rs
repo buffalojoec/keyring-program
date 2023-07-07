@@ -90,7 +90,7 @@ pub fn create_keystore(
     let data = KeyringProgramInstruction::CreateKeystore {}.pack();
 
     let accounts = vec![
-        AccountMeta::new(keystore, true),
+        AccountMeta::new(keystore, false),
         AccountMeta::new(*authority, true),
     ];
 
@@ -112,7 +112,7 @@ pub fn add_entry(
     let data = KeyringProgramInstruction::AddEntry { add_entry_data }.pack();
 
     let accounts = vec![
-        AccountMeta::new(keystore, true),
+        AccountMeta::new(keystore, false),
         AccountMeta::new(*authority, true),
     ];
 
@@ -134,7 +134,7 @@ pub fn remove_entry(
     let data = KeyringProgramInstruction::RemoveEntry { remove_entry_data }.pack();
 
     let accounts = vec![
-        AccountMeta::new(keystore, true),
+        AccountMeta::new(keystore, false),
         AccountMeta::new(*authority, true),
     ];
 

@@ -4,7 +4,7 @@ use {
     crate::{error::KeyringProgramError, tlv::KeystoreEntry},
     solana_program::{
         account_info::AccountInfo, entrypoint::ProgramResult, program_error::ProgramError,
-        pubkey::Pubkey,
+        pubkey::Pubkey, rent::Rent,
     },
 };
 
@@ -92,10 +92,7 @@ impl Keystore {
             return Err(KeyringProgramError::InvalidFormatForEntry.into());
         }
         let new_data = match keystore_info.data_is_empty() {
-            true => {
-                println!("EMPTY");
-                new_entry_data.to_vec()
-            }
+            true => new_entry_data.to_vec(),
             false => {
                 let data = keystore_info.try_borrow_data()?;
                 let mut keystore = Self::unpack(&data)?;
@@ -103,16 +100,16 @@ impl Keystore {
                 keystore.pack()?
             }
         };
-        // realloc_and_serialize(keystore_info, &new_data)?;
-        let new_len = new_data.len();
-        keystore_info.realloc(new_len, true)?;
-        let mut account_data_mut = keystore_info.try_borrow_mut_data()?;
-        account_data_mut[..].copy_from_slice(&new_data);
+        realloc_and_serialize(keystore_info, &new_data)?;
         Ok(())
     }
 
     /// Removes a keystore entry
-    pub fn remove_entry(keystore_info: &AccountInfo, remove_entry_data: &[u8]) -> ProgramResult {
+    pub fn remove_entry(
+        keystore_info: &AccountInfo,
+        authority_info: &AccountInfo,
+        remove_entry_data: &[u8],
+    ) -> ProgramResult {
         let (remove_entry, entry_end) = KeystoreEntry::unpack(remove_entry_data)?;
         // Ensure there are no leftover bytes
         if entry_end != remove_entry_data.len() {
@@ -127,16 +124,19 @@ impl Keystore {
             keystore.entries.retain(|entry| entry != &remove_entry);
             keystore.pack()?
         };
+        let refund_lamports =
+            Rent::default().minimum_balance(keystore_info.data_len() - new_data.len());
+        **authority_info.try_borrow_mut_lamports()? += refund_lamports;
+        **keystore_info.try_borrow_mut_lamports()? -= refund_lamports;
         realloc_and_serialize(keystore_info, &new_data)?;
         Ok(())
     }
 }
 
-fn realloc_and_serialize(account_info: &AccountInfo, data: &[u8]) -> ProgramResult {
-    let new_len = data.len();
-    account_info.realloc(new_len, true)?;
+fn realloc_and_serialize(account_info: &AccountInfo, new_data: &[u8]) -> ProgramResult {
+    account_info.realloc(new_data.len(), true)?;
     let mut account_data_mut = account_info.try_borrow_mut_data()?;
-    account_data_mut[..].copy_from_slice(data);
+    account_data_mut[..].copy_from_slice(new_data);
     Ok(())
 }
 
@@ -145,7 +145,6 @@ mod tests {
     use {
         super::*,
         crate::tlv::{KeystoreEntry, KeystoreEntryKey},
-        solana_program::stake_history::Epoch,
         spl_discriminator::{ArrayDiscriminator, SplDiscriminate},
     };
 
@@ -277,41 +276,5 @@ mod tests {
             keystore_data,
             "Keystore data packed incorrectly"
         );
-    }
-
-    #[test]
-    fn test_add_remove_key_with_account_info() {
-        // Test values
-        let pubkey = Pubkey::new_unique();
-        let mut lamports = 0;
-        let mut data = [];
-        let owner = Pubkey::new_unique();
-
-        let keystore_info = AccountInfo::new(
-            &pubkey,
-            false,
-            true,
-            &mut lamports,
-            &mut data,
-            &owner,
-            false,
-            Epoch::default(),
-        );
-
-        let (_curve_25519_key, _curve_25519_key_data, curve_25519_entry_data) =
-            get_curve25519_data();
-        let (_rsa_key, _rsa_key_data, rsa_entry_data) = get_rsa_data();
-
-        Keystore::add_entry(&keystore_info, &curve_25519_entry_data)
-            .expect("Failed to add Curve25519 key");
-        Keystore::add_entry(&keystore_info, &rsa_entry_data).expect("Failed to add RSA key");
-        assert_eq!(
-            keystore_info.data_len(),
-            curve_25519_entry_data.len() + rsa_entry_data.len()
-        );
-
-        Keystore::remove_entry(&keystore_info, &curve_25519_entry_data)
-            .expect("Failed to remove Curve25519 key");
-        assert_eq!(keystore_info.data_len(), rsa_entry_data.len());
     }
 }

@@ -27,6 +27,7 @@ pub fn process_create_keystore(program_id: &Pubkey, accounts: &[AccountInfo]) ->
 
     let keystore_info = next_account_info(account_info_iter)?;
     let authority_info = next_account_info(account_info_iter)?;
+    let _system_program_info = next_account_info(account_info_iter)?;
 
     let bump_seed = {
         check_authority(authority_info)?;
@@ -68,7 +69,14 @@ pub fn process_add_entry(
         check_authority(authority_info)?;
     }
 
+    msg!("Received request to add {} bytes", add_entry_data.len());
+
     Keystore::add_entry(keystore_info, &add_entry_data)?;
+
+    msg!(
+        "Added entry to keystore. New length: {}",
+        keystore_info.data_len()
+    );
 
     Ok(())
 }
@@ -89,7 +97,17 @@ pub fn process_remove_entry(
         check_authority(authority_info)?;
     }
 
-    Keystore::remove_entry(keystore_info, &remove_entry_data)?;
+    msg!(
+        "Received request to remove {} bytes",
+        remove_entry_data.len()
+    );
+
+    Keystore::remove_entry(keystore_info, authority_info, &remove_entry_data)?;
+
+    msg!(
+        "Removed entry from keystore. New length: {}",
+        keystore_info.data_len()
+    );
 
     Ok(())
 }

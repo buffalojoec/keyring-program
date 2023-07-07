@@ -173,7 +173,7 @@ impl KeystoreEntryKey {
                 key_length,
                 key,
             },
-            key_end,
+            key_end + 12,
         ))
     }
 }
@@ -238,8 +238,7 @@ impl KeystoreEntry {
         // Read the length of the keystore entry
         let entry_length = u32::from_le_bytes(data[8..12].try_into().unwrap());
         let entry_end = entry_length as usize + 12;
-        let (key, key_data_length) = KeystoreEntryKey::unpack(&data[12..])?;
-        let key_end = key_data_length + 12;
+        let (key, key_end) = KeystoreEntryKey::unpack(&data[12..])?;
         let config = KeystoreEntryConfig::unpack(&data[key_end..])?;
         Ok((Self { key, config }, entry_end))
     }
