@@ -139,34 +139,63 @@ impl EncryptionAlgorithm for ComplexAlgorithm {
 #[discriminator_hash_input("spl_keyring_program:configuration:ComplexAlgorithm")]
 pub struct ComplexAlgorithmConfigurations {
     /// The nonce used for encryption
-    pub nonce: [u8; 12],
+    pub nonce: [u8; Self::NONCE_LENGTH],
     /// The additional authenticated data
-    pub aad: [u8; 12],
+    pub aad: [u8; Self::AAD_LENGTH],
+}
+
+impl ComplexAlgorithmConfigurations {
+    /// The length of the nonce in bytes
+    const NONCE_LENGTH: usize = 12;
+    /// The length of the additional authenticated data in bytes
+    const AAD_LENGTH: usize = 12;
+    /// The total length of the configuration in bytes
+    const CONFIG_LENGTH: usize = 12 + Self::NONCE_LENGTH + 12 + Self::AAD_LENGTH;
 }
 
 impl Configurations for ComplexAlgorithmConfigurations {
     fn to_buffer(&self) -> Vec<u8> {
-        let mut buffer = Vec::new();
-        buffer.extend_from_slice(&b"nonce"[..8]);
-        buffer.extend_from_slice(&self.nonce.len().to_le_bytes());
-        buffer.extend_from_slice(&self.nonce);
-        buffer.extend_from_slice(&b"aad"[..8]);
-        buffer.extend_from_slice(&self.aad.len().to_le_bytes());
-        buffer.extend_from_slice(&self.aad);
-        buffer
+        let mut buffer = [0u8; Self::CONFIG_LENGTH];
+
+        let mut nonce_discriminator = [0u8; 8];
+        b"nonce".iter().enumerate().for_each(|(i, byte)| {
+            nonce_discriminator[i] = *byte;
+        });
+        let nonce_config_end = 12 + Self::NONCE_LENGTH;
+
+        let mut aad_discriminator = [0u8; 8];
+        b"aad".iter().enumerate().for_each(|(i, byte)| {
+            aad_discriminator[i] = *byte;
+        });
+        let aad_config_end = nonce_config_end + 12 + Self::AAD_LENGTH;
+
+        buffer[..8].copy_from_slice(&nonce_discriminator);
+        buffer[8..12].copy_from_slice(&self.nonce.len().to_le_bytes());
+        buffer[12..nonce_config_end].copy_from_slice(&self.nonce);
+
+        buffer[nonce_config_end..nonce_config_end + 8].copy_from_slice(&aad_discriminator);
+        buffer[nonce_config_end + 8..nonce_config_end + 12]
+            .copy_from_slice(&self.aad.len().to_le_bytes());
+        buffer[nonce_config_end + 12..aad_config_end].copy_from_slice(&self.aad);
+
+        buffer.to_vec()
     }
 
     fn to_keystore_entry_config(&self) -> Option<KeystoreEntryConfig> {
         // 8 Bytes
         let nonce_discriminator = {
             let mut buffer = [0; 8];
-            buffer.copy_from_slice(&b"nonce"[..8]);
+            b"nonce".iter().enumerate().for_each(|(i, byte)| {
+                buffer[i] = *byte;
+            });
             ArrayDiscriminator::new(buffer)
         };
         // 8 Bytes
         let aad_discriminator = {
             let mut buffer = [0; 8];
-            buffer.copy_from_slice(&b"aad"[..8]);
+            b"aad".iter().enumerate().for_each(|(i, byte)| {
+                buffer[i] = *byte;
+            });
             ArrayDiscriminator::new(buffer)
         };
         Some(KeystoreEntryConfig(vec![

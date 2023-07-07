@@ -9,7 +9,7 @@ pub mod processor;
 pub mod state;
 pub mod tlv;
 
-// #[cfg(not(feature = "no-entrypoint"))]
+#[cfg(not(feature = "no-entrypoint"))]
 mod entrypoint;
 
 solana_program::declare_id!("GBvWerDWxo4yN8cJJU8CiGNhuK3WydCu19LcBRSL9ydX");
