@@ -4,4 +4,6 @@
 /target
 /**/*/target
 test-ledger
+test-ledger-*
 /**/*/test-ledger
+/js/dist

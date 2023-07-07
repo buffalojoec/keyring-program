@@ -19,7 +19,7 @@ export async function buildTransactionV0(
   connection: Connection,
   instructions: TransactionInstruction[],
   payer: PublicKey,
-  signers: Keypair[]
+  signers: Keypair[],
 ): Promise<VersionedTransaction> {
   let blockhash = await connection
     .getLatestBlockhash()

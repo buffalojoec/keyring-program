@@ -1,168 +1,155 @@
 import * as borsh from "borsh";
 import { Buffer } from "buffer";
-import { PublicKey, TransactionInstruction } from "@solana/web3.js";
-import { PROGRAM_ID, getKeystoreAddress } from "./state";
+import { seq, struct, u8 } from "@solana/buffer-layout";
+import {
+  PublicKey,
+  SystemProgram,
+  TransactionInstruction,
+} from "@solana/web3.js";
+import { getKeystoreAddress } from "./state";
+import { PROGRAM_ID } from ".";
 
 /**
  * The instruction discriminators for the Keyring Program
  */
 enum KeyringProgramInstruction {
-  CreateKeystore,
-  AddEntry,
-  RemoveEntry,
+  CreateKeystore = 0,
+  AddEntry = 1,
+  RemoveEntry = 2,
 }
 
 /**
  * Instruction data for the Keyring Program's `CreateKeystore` instruction
  */
-export class CreateKeystoreInstruction {
-  ixDiscriminator: KeyringProgramInstruction =
-    KeyringProgramInstruction.CreateKeystore;
-  constructor() {}
+export interface CreateKeystoreInstructionData {
+  instruction: KeyringProgramInstruction.CreateKeystore;
+}
+export const createKeystoreInstructionData =
+  struct<CreateKeystoreInstructionData>([u8("instruction")]);
 
-  /**
-   * Serialize the instruction data
-   * @returns The serialized instruction data
-   */
-  toBuffer(): Buffer {
-    const createKeystoreSchema = new Map([
-      [
-        CreateKeystoreInstruction,
-        { kind: "struct", fields: [["ix_discriminator", "u8"]] },
-      ],
-    ]);
-    return Buffer.from(borsh.serialize(createKeystoreSchema, this));
-  }
+/**
+ * Builds a transaction instruction for the Keyring Program's `CreateKeystore` instruction
+ * @param authority The user authority
+ * @returns The transaction instruction
+ */
+export function createCreateKeystoreInstruction(
+  authority: PublicKey,
+): TransactionInstruction {
+  const keys = [
+    {
+      pubkey: getKeystoreAddress(authority)[0],
+      isSigner: false,
+      isWritable: true,
+    },
+    { pubkey: authority, isSigner: true, isWritable: false },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+  ];
 
-  /**
-   * Builds a transaction instruction for the Keyring Program's `CreateKeystore` instruction
-   * @param programId The Keyring Program ID
-   * @param authority The user authority
-   * @returns The transaction instruction
-   */
-  instruction(authority: PublicKey): TransactionInstruction {
-    const keys = [
-      {
-        pubkey: getKeystoreAddress(authority)[0],
-        isSigner: false,
-        isWritable: true,
-      },
-      { pubkey: authority, isSigner: true, isWritable: false },
-    ];
-    return new TransactionInstruction({
-      programId: PROGRAM_ID,
-      keys,
-      data: this.toBuffer(),
-    });
-  }
+  const data = Buffer.alloc(createKeystoreInstructionData.span);
+  createKeystoreInstructionData.encode(
+    { instruction: KeyringProgramInstruction.CreateKeystore },
+    data,
+  );
+
+  return new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys,
+    data,
+  });
 }
 
 /**
  * Instruction data for the Keyring Program's `AddEntry` instruction
  */
-export class AddEntryInstruction {
-  ixDiscriminator: KeyringProgramInstruction =
-    KeyringProgramInstruction.AddEntry;
-  addEntryData: Uint8Array;
-  constructor(addEntryData: Uint8Array) {
-    this.addEntryData = addEntryData;
-  }
+export interface AddEntryInstructionData {
+  instruction: KeyringProgramInstruction.AddEntry;
+  addEntryData: number[];
+}
 
-  /**
-   * Serialize the instruction data
-   * @returns The serialized instruction data
-   */
-  toBuffer(): Buffer {
-    let x = this.addEntryData.length;
-    const addEntrySchema = new Map([
-      [
-        AddEntryInstruction,
-        {
-          kind: "struct",
-          fields: [
-            ["ix_discriminator", "u8"],
-            ["add_entry_data", [x]],
-          ],
-        },
-      ],
-    ]);
-    return Buffer.from(borsh.serialize(addEntrySchema, this));
-  }
+/**
+ * Builds a transaction instruction for the Keyring Program's `AddEntry` instruction
+ * @param programId The Keyring Program ID
+ * @param authority The user authority
+ * @returns The transaction instruction
+ */
+export function createAddEntryInstruction(
+  authority: PublicKey,
+  addEntryData: Buffer,
+): TransactionInstruction {
+  const keys = [
+    {
+      pubkey: getKeystoreAddress(authority)[0],
+      isSigner: false,
+      isWritable: true,
+    },
+    { pubkey: authority, isSigner: true, isWritable: false },
+  ];
 
-  /**
-   * Builds a transaction instruction for the Keyring Program's `AddEntry` instruction
-   * @param programId The Keyring Program ID
-   * @param authority The user authority
-   * @returns The transaction instruction
-   */
-  instruction(authority: PublicKey): TransactionInstruction {
-    const keys = [
-      {
-        pubkey: getKeystoreAddress(authority)[0],
-        isSigner: false,
-        isWritable: true,
-      },
-      { pubkey: authority, isSigner: true, isWritable: false },
-    ];
-    return new TransactionInstruction({
-      programId: PROGRAM_ID,
-      keys,
-      data: this.toBuffer(),
-    });
-  }
+  const entryDataAsArray = Array.from(addEntryData);
+  const span = 1 + addEntryData.length;
+  const data = Buffer.alloc(span);
+  struct<AddEntryInstructionData>([
+    u8("instruction"),
+    seq(u8(), entryDataAsArray.length, "addEntryData"),
+  ]).encode(
+    {
+      instruction: KeyringProgramInstruction.AddEntry,
+      addEntryData: entryDataAsArray,
+    },
+    data,
+  );
+
+  return new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys,
+    data,
+  });
 }
 
 /**
  * Instruction data for the Keyring Program's `RemoveEntry` instruction
  */
-export class RemoveEntryInstruction {
-  ixDiscriminator: KeyringProgramInstruction =
-    KeyringProgramInstruction.RemoveEntry;
-  removeEntryData: Uint8Array;
-  constructor(removeEntryData: Uint8Array) {
-    this.removeEntryData = removeEntryData;
-  }
+export interface RemoveEntryInstructionData {
+  instruction: KeyringProgramInstruction.RemoveEntry;
+  removeEntryData: number[];
+}
 
-  /**
-   * Serialize the instruction data
-   * @returns The serialized instruction data
-   */
-  toBuffer(): Buffer {
-    let x = this.removeEntryData.length;
-    const removeEntrySchema = new Map([
-      [
-        RemoveEntryInstruction,
-        {
-          kind: "struct",
-          fields: [
-            ["ix_discriminator", "u8"],
-            ["remove_entry_data", [x]],
-          ],
-        },
-      ],
-    ]);
-    return Buffer.from(borsh.serialize(removeEntrySchema, this));
-  }
+/**
+ * Builds a transaction instruction for the Keyring Program's `RemoveEntry` instruction
+ * @param programId The Keyring Program ID
+ * @param authority The user authority
+ * @returns The transaction instruction
+ */
+export function createRemoveEntryInstruction(
+  authority: PublicKey,
+  removeEntryData: Buffer,
+): TransactionInstruction {
+  const keys = [
+    {
+      pubkey: getKeystoreAddress(authority)[0],
+      isSigner: false,
+      isWritable: true,
+    },
+    { pubkey: authority, isSigner: true, isWritable: false },
+  ];
 
-  /**
-   * Builds a transaction instruction for the Keyring Program's `RemoveEntry` instruction
-   * @param programId The Keyring Program ID
-   * @param authority The user authority
-   * @returns The transaction instruction
-   */
-  instruction(authority: PublicKey): TransactionInstruction {
-    const keys = [
-      {
-        pubkey: getKeystoreAddress(authority)[0],
-        isSigner: false,
-        isWritable: true,
-      },
-      { pubkey: authority, isSigner: true, isWritable: false },
-    ];
-    return new TransactionInstruction({
-      programId: PROGRAM_ID,
-      keys,
-      data: this.toBuffer(),
-    });
-  }
+  const removeEntryDataAsArray = Array.from(removeEntryData);
+  const span = 1 + removeEntryDataAsArray.length;
+  const data = Buffer.alloc(span);
+  struct<RemoveEntryInstructionData>([
+    u8("instruction"),
+    seq(u8(), removeEntryDataAsArray.length, "removeEntryData"),
+  ]).encode(
+    {
+      instruction: KeyringProgramInstruction.RemoveEntry,
+      removeEntryData: removeEntryDataAsArray,
+    },
+    data,
+  );
+
+  return new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys,
+    data,
+  });
 }

@@ -1,16 +1,10 @@
-import { Connection, PublicKey } from "@solana/web3.js";
+import { AccountInfo, Connection, PublicKey } from "@solana/web3.js";
 import {
   EncryptionAlgorithm,
   fromKeystoreEntrytoEncryptionAlgorithm,
 } from "./algorithm";
 import { packKeystoreEntry, unpackKeystoreEntry } from "./tlv";
-
-/**
- * The Keyring Program ID
- */
-export const PROGRAM_ID: PublicKey = new PublicKey(
-  "8Td3Rmp4WHhJj1VCzVvmNuk7cMWjr5QeeQ9ist9dffKw"
-);
+import { PROGRAM_ID } from ".";
 
 /**
  * Get the user's keystore PDA
@@ -21,7 +15,7 @@ export const PROGRAM_ID: PublicKey = new PublicKey(
 export function getKeystoreAddress(authority: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("keystore"), authority.toBuffer()],
-    PROGRAM_ID
+    PROGRAM_ID,
   );
 }
 
@@ -31,16 +25,29 @@ export function getKeystoreAddress(authority: PublicKey): [PublicKey, number] {
  * @param authority The user authority
  * @returns The user's keystore account
  */
-export async function getKeystore(
+export async function getKeystoreAccount(
   connection: Connection,
-  authority: PublicKey
-): Promise<Keystore> {
+  authority: PublicKey,
+): Promise<AccountInfo<Buffer>> {
   const [keystoreAddress] = getKeystoreAddress(authority);
   const keystoreAccount = await connection.getAccountInfo(keystoreAddress);
   if (keystoreAccount === null) {
     throw new Error("Keystore account not found");
   }
-  return unpackKeystore(keystoreAccount.data);
+  return keystoreAccount;
+}
+
+/**
+ * Get the user's keystore account, unpacked
+ * @param connection Solana RPC connection
+ * @param authority The user authority
+ * @returns The user's keystore account, unpacked
+ */
+export async function getKeystore(
+  connection: Connection,
+  authority: PublicKey,
+): Promise<Keystore> {
+  return unpackKeystore((await getKeystoreAccount(connection, authority)).data);
 }
 
 /**
@@ -71,22 +78,25 @@ export class Keystore {
   }
 }
 
-export function packKeystore(keystore: Keystore): Uint8Array {
+export function packKeystore(keystore: Keystore): Buffer {
   let offset = 0;
-  let data = new Uint8Array(0);
+  let data = Buffer.alloc(0);
   for (const entry of keystore.entries) {
     let packData = packKeystoreEntry(entry.toKeystoreEntry());
-    data.set(packData, offset);
+    let newData = Buffer.alloc(data.length + packData.length);
+    newData.set(data, 0);
+    newData.set(packData, offset);
+    data = newData;
     offset += packData.length;
   }
   return data;
 }
 
-export function unpackKeystore(data: Uint8Array): Keystore {
+export function unpackKeystore(data: Buffer): Keystore {
   let entries: EncryptionAlgorithm[] = [];
   let offset = 0;
   while (offset < data.length) {
-    let [entry, entryEnd] = unpackKeystoreEntry(data.slice(offset));
+    let [entry, entryEnd] = unpackKeystoreEntry(data.subarray(offset));
     entries.push(fromKeystoreEntrytoEncryptionAlgorithm(entry));
     offset += entryEnd;
   }
