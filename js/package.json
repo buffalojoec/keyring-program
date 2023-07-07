@@ -21,6 +21,7 @@
   },
   "scripts": {
     "lint": "yarn prettier . --check",
+    "lint-fix": "yarn prettier . --write",
     "build": "tsc",
     "test": "yarn run ts-mocha -p ./tests/tsconfig.test.json -t 1000000 tests/main.test.ts"
   }

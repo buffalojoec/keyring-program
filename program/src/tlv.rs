@@ -77,7 +77,7 @@ impl KeystoreEntryConfigEntry {
 /// derived from the `SplDiscriminate` macro
 #[derive(Clone, Debug, Default, PartialEq, SplDiscriminate)]
 #[discriminator_hash_input("spl_keyring_program:keystore_entry:configuration")]
-pub struct KeystoreEntryConfig(Vec<KeystoreEntryConfigEntry>);
+pub struct KeystoreEntryConfig(pub Vec<KeystoreEntryConfigEntry>);
 impl KeystoreEntryConfig {
     /// Returns the length of a `KeystoreEntryConfig`
     pub fn data_len(&self) -> usize {

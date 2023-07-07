@@ -174,15 +174,19 @@ export class ComplexAlgorithmConfigurations implements Configurations {
     ]);
   }
   toKeystoreEntryConfig(): KeystoreEntryConfig {
+    let nonceDiscriminator = Buffer.alloc(8); // 8 Bytes
+    nonceDiscriminator.set(Buffer.from("nonce"));
+    let aadDiscriminator = Buffer.alloc(8); // 8 Bytes
+    aadDiscriminator.set(Buffer.from("nonce"));
     return {
       configList: [
         {
-          key: Buffer.from("nonce"),
+          key: nonceDiscriminator,
           valueLength: this.nonce.length,
           value: Buffer.from(this.nonce),
         },
         {
-          key: Buffer.from("aad"),
+          key: aadDiscriminator,
           valueLength: this.aad.length,
           value: Buffer.from(this.aad),
         },

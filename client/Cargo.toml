@@ -1,5 +1,5 @@
 [package]
-name = "spl-keyring-program-client"
+name = "spl-keyring-client"
 version = "0.0.1"
 description = "Solana Program Library Keyring Program Rust Client"
 authors = ["Solana Labs Maintainers <maintainers@solanalabs.com>"]
