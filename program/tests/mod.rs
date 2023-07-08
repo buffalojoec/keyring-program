@@ -1,69 +1,55 @@
 #![cfg(feature = "test-sbf")]
 
 use {
-    solana_program_test::{processor, tokio::sync::Mutex, ProgramTest, ProgramTestContext},
+    solana_program_test::{
+        processor,
+        tokio::{self, sync::Mutex},
+        ProgramTest, ProgramTestContext,
+    },
     solana_sdk::{
-        pubkey::Pubkey, signature::Signer, signer::keypair::Keypair, system_instruction,
-        transaction::Transaction,
+        instruction::Instruction, pubkey::Pubkey, rent::Rent, signature::Signer,
+        signer::keypair::Keypair, system_instruction, transaction::Transaction,
     },
-    spl_keyring::instruction::{add_entry, create_keystore, remove_entry},
     spl_keyring_client::{
-        client::{
-            ProgramBanksClient, ProgramBanksClientProcessTransaction, ProgramClient,
-            SendTransaction,
-        },
-        token::Token,
+        algorithm::{Curve25519, EncryptionAlgorithm, Rsa},
+        client::{ProgramBanksClient, ProgramBanksClientProcessTransaction, ProgramClient},
     },
-    spl_keyring_program::state::Keystore,
+    spl_keyring_program::{
+        id,
+        instruction::{add_entry, create_keystore, remove_entry},
+        state::Keystore,
+    },
     std::{assert_eq, sync::Arc},
 };
 
-pub async fn setup(
+fn get_fund_rent_instruction(
     program_id: &Pubkey,
-) -> (
-    Arc<Mutex<ProgramTestContext>>,
-    Arc<dyn ProgramClient<ProgramBanksClientProcessTransaction>>,
-    Arc<Keypair>,
-) {
-    let mut program_test = ProgramTest::new(
-        "spl_keyring",
-        *program_id,
-        processor!(spl_keyring::processor::process),
-    );
-    program_test.prefer_bpf(false);
-
-    let context = program_test.start_with_context().await;
-    let payer =
-        Arc::new(Keypair::from_bytes(&context.payer.to_bytes()).expect("failed to copy keypair"));
-    let context = Arc::new(Mutex::new(context));
-
-    let client: Arc<dyn ProgramClient<ProgramBanksClientProcessTransaction>> =
-        Arc::new(ProgramBanksClient::new_from_context(
-            Arc::clone(&context),
-            ProgramBanksClientProcessTransaction,
-        ));
-    (context, client, payer)
+    authority: &Pubkey,
+    new_space: usize,
+) -> Instruction {
+    let lamports = Rent::default().minimum_balance(new_space);
+    system_instruction::transfer(authority, &Keystore::pda(program_id, authority).0, lamports)
 }
 
 #[tokio::test]
 async fn test_create_keystore() {
-    let program_id = Pubkey::new_unique();
-    let (context, client, payer) = setup(&program_id).await;
+    let program_id = id();
+    let mut pt = ProgramTest::new(
+        "spl_keyring_program",
+        program_id,
+        processor!(spl_keyring_program::processor::process),
+    );
+    let (mut banks_client, payer, recent_blockhash) = pt.start().await;
 
     let transaction = Transaction::new_signed_with_payer(
-        &[create_keystore(&program_id, &payer.pubkey())],
+        &[create_keystore(&program_id, &payer.pubkey()).unwrap()],
         Some(&payer.pubkey()),
         &[&payer],
-        context.last_blockhash,
+        recent_blockhash,
     );
-    context
-        .banks_client
-        .process_transaction(transaction)
-        .await
-        .unwrap();
+    banks_client.process_transaction(transaction).await.unwrap();
 
-    let fetched_keystore_account = context
-        .banks_client
+    let fetched_keystore_account = banks_client
         .get_account(Keystore::pda(&program_id, &payer.pubkey()).0)
         .await
         .unwrap()
@@ -73,89 +59,116 @@ async fn test_create_keystore() {
 
 #[tokio::test]
 async fn test_add_entry() {
-    let program_id = Pubkey::new_unique();
-    let (context, client, payer) = setup(&program_id).await;
+    let program_id = id();
+    let mut pt = ProgramTest::new(
+        "spl_keyring_program",
+        program_id,
+        processor!(spl_keyring_program::processor::process),
+    );
+    let (mut banks_client, payer, recent_blockhash) = pt.start().await;
 
-    let entry_curve25519 = Curve25519::new(); // TODO
-    let entry_rsa = Rsa::new(); // TODO
+    let curve_key = Curve25519::new(Pubkey::new_unique().to_bytes());
+    let curve_entry_data = curve_key.to_keystore_entry();
+
+    let mut fake_rsa_key_bytes = [0u8; 64];
+    fake_rsa_key_bytes
+        .copy_from_slice(&[Pubkey::new_unique().as_ref(), Pubkey::new_unique().as_ref()].concat());
+    let rsa_key = Rsa::new(fake_rsa_key_bytes);
+    let rsa_entry_data = rsa_key.to_keystore_entry();
 
     let transaction = Transaction::new_signed_with_payer(
         &[
-            create_keystore(&program_id, &payer.pubkey()),
+            create_keystore(&program_id, &payer.pubkey()).unwrap(),
+            get_fund_rent_instruction(&program_id, &payer.pubkey(), curve_entry_data.data_len()),
             add_entry(
                 &program_id,
                 &payer.pubkey(),
-                entry_curve25519.clone().to_bytes(),
-            ),
-            add_entry(&program_id, &payer.pubkey(), entry_rsa.clone().to_bytes()),
+                curve_entry_data.clone().pack().unwrap(),
+            )
+            .unwrap(),
+            get_fund_rent_instruction(&program_id, &payer.pubkey(), rsa_entry_data.data_len()),
+            add_entry(
+                &program_id,
+                &payer.pubkey(),
+                rsa_entry_data.clone().pack().unwrap(),
+            )
+            .unwrap(),
         ],
         Some(&payer.pubkey()),
         &[&payer],
-        context.last_blockhash,
+        recent_blockhash,
     );
-    context
-        .banks_client
-        .process_transaction(transaction)
-        .await
-        .unwrap();
+    banks_client.process_transaction(transaction).await.unwrap();
 
-    let fetched_keystore_account = context
-        .banks_client
+    let fetched_keystore_account = banks_client
         .get_account(Keystore::pda(&program_id, &payer.pubkey()).0)
         .await
         .unwrap()
         .unwrap();
-    let keystore = Keystore::unpack(fetched_keystore_account.try_borrow_data().unwrap()).unwrap();
-
+    let keystore = Keystore::unpack(&fetched_keystore_account.data).unwrap();
     let mock_keystore = Keystore {
-        entries: vec![entry_curve25519, entry_rsa],
+        entries: vec![curve_entry_data, rsa_entry_data],
     };
     assert_eq!(keystore, mock_keystore);
 }
 
 #[tokio::test]
 async fn test_remove_entry() {
-    let program_id = Pubkey::new_unique();
-    let (context, client, payer) = setup(&program_id).await;
+    let program_id = id();
+    let mut pt = ProgramTest::new(
+        "spl_keyring_program",
+        program_id,
+        processor!(spl_keyring_program::processor::process),
+    );
+    let (mut banks_client, payer, recent_blockhash) = pt.start().await;
 
-    let entry_curve25519 = Curve25519::new(); // TODO
-    let entry_rsa = Rsa::new(); // TODO
+    let curve_key = Curve25519::new(Pubkey::new_unique().to_bytes());
+    let curve_entry_data = curve_key.to_keystore_entry();
+
+    let mut fake_rsa_key_bytes = [0u8; 64];
+    fake_rsa_key_bytes
+        .copy_from_slice(&[Pubkey::new_unique().as_ref(), Pubkey::new_unique().as_ref()].concat());
+    let rsa_key = Rsa::new(fake_rsa_key_bytes);
+    let rsa_entry_data = rsa_key.to_keystore_entry();
 
     let transaction = Transaction::new_signed_with_payer(
         &[
-            create_keystore(&program_id, &payer.pubkey()),
+            create_keystore(&program_id, &payer.pubkey()).unwrap(),
+            get_fund_rent_instruction(&program_id, &payer.pubkey(), curve_entry_data.data_len()),
             add_entry(
                 &program_id,
                 &payer.pubkey(),
-                entry_curve25519.clone().to_bytes(),
-            ),
-            add_entry(&program_id, &payer.pubkey(), entry_rsa.clone().to_bytes()),
+                curve_entry_data.clone().pack().unwrap(),
+            )
+            .unwrap(),
+            get_fund_rent_instruction(&program_id, &payer.pubkey(), rsa_entry_data.data_len()),
+            add_entry(
+                &program_id,
+                &payer.pubkey(),
+                rsa_entry_data.clone().pack().unwrap(),
+            )
+            .unwrap(),
             remove_entry(
                 &program_id,
                 &payer.pubkey(),
-                entry_curve25519.clone().to_bytes(),
-            ),
+                curve_entry_data.clone().pack().unwrap(),
+            )
+            .unwrap(),
         ],
         Some(&payer.pubkey()),
         &[&payer],
-        context.last_blockhash,
+        recent_blockhash,
     );
-    context
-        .banks_client
-        .process_transaction(transaction)
-        .await
-        .unwrap();
+    banks_client.process_transaction(transaction).await.unwrap();
 
-    let fetched_keystore_account = context
-        .banks_client
+    let fetched_keystore_account = banks_client
         .get_account(Keystore::pda(&program_id, &payer.pubkey()).0)
         .await
         .unwrap()
         .unwrap();
-    let keystore = Keystore::unpack(fetched_keystore_account.try_borrow_data().unwrap()).unwrap();
-
+    let keystore = Keystore::unpack(&fetched_keystore_account.data).unwrap();
     let mock_keystore = Keystore {
-        entries: vec![entry_rsa],
+        entries: vec![rsa_entry_data],
     };
     assert_eq!(keystore, mock_keystore);
 }

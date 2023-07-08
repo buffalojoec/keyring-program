@@ -191,6 +191,15 @@ pub struct KeystoreEntry {
     pub config: Option<KeystoreEntryConfig>,
 }
 impl KeystoreEntry {
+    /// Returns the length of the keystore entry
+    pub fn data_len(&self) -> usize {
+        let mut len = 12 + self.key.data_len();
+        if let Some(config) = &self.config {
+            len += config.data_len();
+        }
+        len
+    }
+
     /// Packs a `KeystoreEntry` into a vector of bytes
     pub fn pack(&self) -> Result<Vec<u8>, ProgramError> {
         let mut data = Vec::new();

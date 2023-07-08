@@ -6,6 +6,7 @@ use {
         instruction::{AccountMeta, Instruction},
         program_error::ProgramError,
         pubkey::Pubkey,
+        system_program,
     },
 };
 
@@ -92,6 +93,7 @@ pub fn create_keystore(
     let accounts = vec![
         AccountMeta::new(keystore, false),
         AccountMeta::new(*authority, true),
+        AccountMeta::new(system_program::id(), false),
     ];
 
     Ok(Instruction {
