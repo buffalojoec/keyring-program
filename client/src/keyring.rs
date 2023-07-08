@@ -62,14 +62,14 @@ where
     /// Construct a transaction from a list of instructions
     async fn construct_tx<S: Signers>(
         &self,
-        token_instructions: &[Instruction],
+        keyring_instructions: &[Instruction],
         signing_keypairs: &S,
     ) -> Result<Transaction, KeyringError> {
         let mut instructions = vec![];
         let payer_key = self.payer.pubkey();
         let fee_payer = Some(&payer_key);
 
-        instructions.extend_from_slice(token_instructions);
+        instructions.extend_from_slice(keyring_instructions);
 
         let (message, blockhash) = {
             let latest_blockhash = self
@@ -98,11 +98,11 @@ where
     /// Construct a transaction from a list of instructions
     pub async fn process_ixs<S: Signers>(
         &self,
-        token_instructions: &[Instruction],
+        keyring_instructions: &[Instruction],
         signing_keypairs: &S,
     ) -> Result<(), KeyringError> {
         let transaction = self
-            .construct_tx(token_instructions, signing_keypairs)
+            .construct_tx(keyring_instructions, signing_keypairs)
             .await?;
 
         self.client
@@ -115,11 +115,14 @@ where
 
     /// Create a new keystore
     pub async fn create_keystore(&self, authority: &Keypair) -> Result<(), KeyringError> {
-        let ix = spl_keyring_program::instruction::create_keystore(
-            &spl_keyring_program::id(),
-            &authority.pubkey(),
-        )?;
-        self.process_ixs(&[ix], &[authority]).await
+        self.process_ixs(
+            &[spl_keyring_program::instruction::create_keystore(
+                &spl_keyring_program::id(),
+                &authority.pubkey(),
+            )?],
+            &[authority],
+        )
+        .await
     }
 
     /// Add a new key to a keystore
@@ -128,12 +131,15 @@ where
         authority: &Keypair,
         entry: KeystoreEntry,
     ) -> Result<(), KeyringError> {
-        let ix = spl_keyring_program::instruction::add_entry(
-            &spl_keyring_program::id(),
-            &authority.pubkey(),
-            entry.pack().map_err(KeyringError::Program)?,
-        )?;
-        self.process_ixs(&[ix], &[authority]).await
+        self.process_ixs(
+            &[spl_keyring_program::instruction::add_entry(
+                &spl_keyring_program::id(),
+                &authority.pubkey(),
+                entry.pack().map_err(KeyringError::Program)?,
+            )?],
+            &[authority],
+        )
+        .await
     }
 
     /// Remove a key from a keystore
@@ -142,11 +148,14 @@ where
         authority: &Keypair,
         entry: KeystoreEntry,
     ) -> Result<(), KeyringError> {
-        let ix = spl_keyring_program::instruction::remove_entry(
-            &spl_keyring_program::id(),
-            &authority.pubkey(),
-            entry.pack().map_err(KeyringError::Program)?,
-        )?;
-        self.process_ixs(&[ix], &[authority]).await
+        self.process_ixs(
+            &[spl_keyring_program::instruction::remove_entry(
+                &spl_keyring_program::id(),
+                &authority.pubkey(),
+                entry.pack().map_err(KeyringError::Program)?,
+            )?],
+            &[authority],
+        )
+        .await
     }
 }

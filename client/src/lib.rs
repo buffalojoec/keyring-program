@@ -7,4 +7,4 @@ pub mod algorithm;
 pub mod error;
 pub mod keyring;
 
-pub use {spl_keyring_program, spl_token_client::client};
+pub use spl_keyring_program::{state, tlv};

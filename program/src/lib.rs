@@ -10,4 +10,4 @@ pub mod processor;
 pub mod state;
 pub mod tlv;
 
-solana_program::declare_id!("4HBknBczTrUDSATx3sE3aeaTPThxiPcRYQMuAojP9tE9");
+solana_program::declare_id!("4ZXqc9x6DkRthFYxSwTqfDKpX55FfyckoXAdS34xECPu");

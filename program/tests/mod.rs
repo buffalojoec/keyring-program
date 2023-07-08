@@ -10,10 +10,7 @@ use {
         instruction::Instruction, pubkey::Pubkey, rent::Rent, signature::Signer,
         signer::keypair::Keypair, system_instruction, transaction::Transaction,
     },
-    spl_keyring_client::{
-        algorithm::{Curve25519, EncryptionAlgorithm, Rsa},
-        client::{ProgramBanksClient, ProgramBanksClientProcessTransaction, ProgramClient},
-    },
+    spl_keyring_client::algorithm::{Curve25519, EncryptionAlgorithm, Rsa},
     spl_keyring_program::{
         id,
         instruction::{add_entry, create_keystore, remove_entry},
