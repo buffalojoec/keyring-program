@@ -1,14 +1,10 @@
 #![cfg(feature = "test-sbf")]
 
 use {
-    solana_program_test::{
-        processor,
-        tokio::{self, sync::Mutex},
-        ProgramTest, ProgramTestContext,
-    },
+    solana_program_test::{processor, tokio, ProgramTest},
     solana_sdk::{
         instruction::Instruction, pubkey::Pubkey, rent::Rent, signature::Signer,
-        signer::keypair::Keypair, system_instruction, transaction::Transaction,
+        system_instruction, transaction::Transaction,
     },
     spl_keyring_client::algorithm::{Curve25519, EncryptionAlgorithm, Rsa},
     spl_keyring_program::{
@@ -16,7 +12,7 @@ use {
         instruction::{add_entry, create_keystore, remove_entry},
         state::Keystore,
     },
-    std::{assert_eq, sync::Arc},
+    std::assert_eq,
 };
 
 fn get_fund_rent_instruction(
@@ -31,12 +27,12 @@ fn get_fund_rent_instruction(
 #[tokio::test]
 async fn test_create_keystore() {
     let program_id = id();
-    let mut pt = ProgramTest::new(
+    let program_test = ProgramTest::new(
         "spl_keyring_program",
         program_id,
         processor!(spl_keyring_program::processor::process),
     );
-    let (mut banks_client, payer, recent_blockhash) = pt.start().await;
+    let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
 
     let transaction = Transaction::new_signed_with_payer(
         &[create_keystore(&program_id, &payer.pubkey()).unwrap()],
@@ -57,12 +53,12 @@ async fn test_create_keystore() {
 #[tokio::test]
 async fn test_add_entry() {
     let program_id = id();
-    let mut pt = ProgramTest::new(
+    let program_test = ProgramTest::new(
         "spl_keyring_program",
         program_id,
         processor!(spl_keyring_program::processor::process),
     );
-    let (mut banks_client, payer, recent_blockhash) = pt.start().await;
+    let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
 
     let curve_key = Curve25519::new(Pubkey::new_unique().to_bytes());
     let curve_entry_data = curve_key.to_keystore_entry();
@@ -112,12 +108,12 @@ async fn test_add_entry() {
 #[tokio::test]
 async fn test_remove_entry() {
     let program_id = id();
-    let mut pt = ProgramTest::new(
+    let program_test = ProgramTest::new(
         "spl_keyring_program",
         program_id,
         processor!(spl_keyring_program::processor::process),
     );
-    let (mut banks_client, payer, recent_blockhash) = pt.start().await;
+    let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
 
     let curve_key = Curve25519::new(Pubkey::new_unique().to_bytes());
     let curve_entry_data = curve_key.to_keystore_entry();

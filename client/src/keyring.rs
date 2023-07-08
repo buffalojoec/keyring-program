@@ -47,7 +47,7 @@ where
     /// Fetch the keystore account
     pub async fn get_keystore_account(&self, authority: &Pubkey) -> Result<Account, KeyringError> {
         self.client
-            .get_account(*authority)
+            .get_account(Keystore::pda(&spl_keyring_program::id(), authority).0)
             .await
             .map_err(KeyringError::Client)?
             .ok_or(KeyringError::KeystoreNotFound)
