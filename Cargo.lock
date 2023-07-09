@@ -4414,6 +4414,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cce5d563b58ef1bb2cdbbfe0dfb9ffdc24903b10ae6a4df2d8f425ece375033f"
 dependencies = [
+ "borsh 0.10.3",
  "bytemuck",
  "solana-program",
  "spl-discriminator-derive 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -4479,6 +4480,7 @@ dependencies = [
 name = "spl-keyring-client"
 version = "0.0.1"
 dependencies = [
+ "borsh 0.10.3",
  "solana-program-test",
  "solana-sdk",
  "spl-discriminator 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -4491,6 +4493,7 @@ dependencies = [
 name = "spl-keyring-program"
 version = "0.0.1"
 dependencies = [
+ "borsh 0.10.3",
  "getrandom 0.2.10",
  "solana-program",
  "solana-program-test",

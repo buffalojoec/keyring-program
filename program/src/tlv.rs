@@ -2,6 +2,7 @@
 
 use {
     crate::error::KeyringProgramError,
+    borsh::{BorshDeserialize, BorshSerialize},
     solana_program::program_error::ProgramError,
     spl_discriminator::{ArrayDiscriminator, SplDiscriminate},
 };
@@ -10,64 +11,36 @@ use {
 ///
 /// Note: The "key" for this key-value entry is used as the TLV discriminator
 /// and passed in when creating a new configuration entry
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize)]
 pub struct KeystoreEntryConfigEntry {
     /// The configuration entry key
     pub key: ArrayDiscriminator,
-    /// The length of the configuration entry value
-    pub value_length: u32,
     /// The configuration entry value
     pub value: Vec<u8>,
 }
 impl KeystoreEntryConfigEntry {
     /// Returns the length of a `KeystoreEntryConfigEntry`
     pub fn data_len(&self) -> usize {
-        12 + self.value_length as usize
+        12 + self.value.len()
     }
 
     /// Packs a `KeystoreEntryConfigEntry` into a vector of bytes
     pub fn pack(&self) -> Result<Vec<u8>, ProgramError> {
         let mut data = Vec::new();
-        data.extend_from_slice(self.key.as_slice());
-        data.extend_from_slice(&self.value_length.to_le_bytes());
-        data.extend_from_slice(&self.value);
+        self.serialize(&mut data)?;
         Ok(data)
     }
 
     /// Unpacks a slice of data into a `KeystoreEntryConfigEntry`
-    pub fn unpack(data: &[u8]) -> Result<(Self, usize), ProgramError> {
-        // If the data isn't at least 12 bytes long, it's invalid
-        if data.len() < 12 {
-            return Err(KeyringProgramError::InvalidFormatForConfigEntry.into());
-        }
-        // Take the configuration entry key
-        let key = data[0..8].try_into().unwrap();
-        // Take the length of the configuration entry
-        let value_length = u32::from_le_bytes(data[8..12].try_into().unwrap());
-        let config_entry_end = value_length as usize + 12;
-        // Take the configuration entry value
-        let value = data[12..config_entry_end].to_vec();
-        Ok((
-            Self {
-                key,
-                value_length,
-                value,
-            },
-            config_entry_end,
-        ))
+    pub fn unpack(data: &[u8]) -> Result<Self, ProgramError> {
+        Self::try_from_slice(data)
+            .map_err(|_| KeyringProgramError::InvalidFormatForConfigEntry.into())
     }
 
     /// Unpacks a slice of data into a `Vec<KeystoreEntryConfigEntry>`
     pub fn unpack_to_vec(data: &[u8]) -> Result<Vec<Self>, ProgramError> {
-        // Iteratively unpack config entries until there is no data left
-        let mut config_vec = Vec::new();
-        let mut data = data;
-        while !data.is_empty() {
-            let (config_entry, config_entry_end) = Self::unpack(data)?;
-            config_vec.push(config_entry);
-            data = &data[config_entry_end..];
-        }
-        Ok(config_vec)
+        BorshDeserialize::try_from_slice(data)
+            .map_err(|_| KeyringProgramError::InvalidFormatForConfigEntry.into())
     }
 }
 
@@ -75,7 +48,7 @@ impl KeystoreEntryConfigEntry {
 ///
 /// Note: This section is identified by it's unique TLV discriminator,
 /// derived from the `SplDiscriminate` macro
-#[derive(Clone, Debug, Default, PartialEq, SplDiscriminate)]
+#[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, SplDiscriminate)]
 #[discriminator_hash_input("spl_keyring_program:keystore_entry:configuration")]
 pub struct KeystoreEntryConfig(pub Vec<KeystoreEntryConfigEntry>);
 impl KeystoreEntryConfig {
@@ -100,28 +73,14 @@ impl KeystoreEntryConfig {
     /// Unpacks a slice of data into a `KeystoreEntryConfig`
     pub fn unpack(data: &[u8]) -> Result<Option<Self>, ProgramError> {
         // If the first byte is 0, there is no config data
-        if data[0] == 0 {
+        if data[0] == 0 && data.len() == 1 {
             return Ok(None);
+        } else {
+            match Self::try_from_slice(data) {
+                Ok(config) => Ok(Some(config)),
+                Err(_) => Err(KeyringProgramError::InvalidFormatForConfig.into()),
+            }
         }
-        // If the data isn't at least 12 bytes long, it's invalid
-        // (discriminator, length, config)
-        if data[0] != 0 && data.len() < 12 {
-            return Err(KeyringProgramError::InvalidFormatForConfig.into());
-        }
-        if &data[0..8] != Self::SPL_DISCRIMINATOR_SLICE {
-            return Err(KeyringProgramError::InvalidFormatForConfig.into());
-        }
-        // Read the length of the config
-        let config_end = u32::from_le_bytes(data[8..12].try_into().unwrap()) as usize + 12;
-        // Ensure there are no leftover bytes
-        if config_end != data.len() {
-            return Err(KeyringProgramError::InvalidFormatForConfig.into());
-        }
-        // Take the config data from the slice
-        let config_data = &data[12..];
-        // Unpack the config data into a vector of config entries
-        let config_vec = KeystoreEntryConfigEntry::unpack_to_vec(config_data)?;
-        Ok(Some(Self(config_vec)))
     }
 }
 
@@ -129,12 +88,10 @@ impl KeystoreEntryConfig {
 ///
 /// Note: The "key discriminator" for the key section is used as the TLV
 /// discriminator and passed in when creating a new keystore entry
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize)]
 pub struct KeystoreEntryKey {
     /// The key discriminator
     pub discriminator: ArrayDiscriminator,
-    /// The key length
-    pub key_length: u32,
     /// The key data
     pub key: Vec<u8>,
 }
@@ -147,34 +104,13 @@ impl KeystoreEntryKey {
     /// Packs a `KeystoreEntryKey` into a vector of bytes
     pub fn pack(&self) -> Result<Vec<u8>, ProgramError> {
         let mut data = Vec::new();
-        data.extend_from_slice(self.discriminator.as_slice());
-        data.extend_from_slice(&self.key_length.to_le_bytes());
-        data.extend_from_slice(&self.key);
+        self.serialize(&mut data)?;
         Ok(data)
     }
 
     /// Unpacks a slice of data into a `KeystoreEntryKey`
-    pub fn unpack(data: &[u8]) -> Result<(Self, usize), ProgramError> {
-        // If the data isn't at least 12 bytes long, it's invalid
-        // (discriminator, length, key)
-        if data.len() < 12 {
-            return Err(KeyringProgramError::InvalidFormatForKey.into());
-        }
-        // Take the key discriminator
-        let discriminator = data[0..8].try_into().unwrap();
-        // Take the length of the key
-        let key_length = u32::from_le_bytes(data[8..12].try_into().unwrap());
-        let key_end = key_length as usize + 12;
-        // Take the key data
-        let key = data[12..key_end].to_vec();
-        Ok((
-            Self {
-                discriminator,
-                key_length,
-                key,
-            },
-            key_end + 12,
-        ))
+    pub fn unpack(data: &[u8]) -> Result<Self, ProgramError> {
+        Self::try_from_slice(data).map_err(|_| KeyringProgramError::InvalidFormatForKey.into())
     }
 }
 
@@ -182,15 +118,29 @@ impl KeystoreEntryKey {
 ///
 /// Note: Each entry is identified by it's unique TLV discriminator,
 /// derived from the `SplDiscriminate` macro
-#[derive(Clone, Debug, Default, PartialEq, SplDiscriminate)]
+#[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize, SplDiscriminate)]
 #[discriminator_hash_input("spl_keyring_program:keystore_entry")]
 pub struct KeystoreEntry {
+    /// The new entry discriminator
+    pub discriminator: ArrayDiscriminator,
     /// The key data
     pub key: KeystoreEntryKey,
     /// Additional configuration data
     pub config: Option<KeystoreEntryConfig>,
 }
 impl KeystoreEntry {
+    /// Creates a new `KeystoreEntry`
+    pub fn new(
+        key: KeystoreEntryKey,
+        config: Option<KeystoreEntryConfig>,
+    ) -> Result<Self, ProgramError> {
+        Ok(Self {
+            discriminator: Self::SPL_DISCRIMINATOR,
+            key,
+            config,
+        })
+    }
+
     /// Returns the length of the keystore entry
     pub fn data_len(&self) -> usize {
         let mut len = 12 + self.key.data_len();
@@ -203,52 +153,12 @@ impl KeystoreEntry {
     /// Packs a `KeystoreEntry` into a vector of bytes
     pub fn pack(&self) -> Result<Vec<u8>, ProgramError> {
         let mut data = Vec::new();
-        // Pack the entry discriminator
-        data.extend_from_slice(Self::SPL_DISCRIMINATOR_SLICE);
-        // Get the length of the key and its end index
-        let key_length = self.key.key_length;
-        let key_end: usize = 12 + key_length as usize;
-        // Check if the entry has additional configurations
-        match &self.config {
-            Some(config) => {
-                // Pack the entry length
-                let entry_length = key_end + config.data_len();
-                data.extend_from_slice(&(entry_length as u32).to_le_bytes());
-                // Pack the key
-                data.extend_from_slice(&self.key.pack()?);
-                // Pack the config
-                data.extend_from_slice(&config.pack()?);
-            }
-            None => {
-                // Pack the entry length
-                let entry_length = key_end + 1;
-                data.extend_from_slice(&(entry_length as u32).to_le_bytes());
-                // Pack the key
-                data.extend_from_slice(&self.key.pack()?);
-                // Pack a single zero
-                data.push(0);
-            }
-        };
+        self.serialize(&mut data)?;
         Ok(data)
     }
 
     /// Unpacks a slice of data into a `KeystoreEntry`
-    pub fn unpack(data: &[u8]) -> Result<(Self, usize), ProgramError> {
-        // If the data isn't at least 12 bytes long, it's invalid
-        // (discriminator, length, entry data)
-        if data.len() < 12 {
-            return Err(KeyringProgramError::InvalidFormatForEntry.into());
-        }
-        // If the first 8 bytes of the slice don't match the unique TLV
-        // discriminator for a new entry, it's invalid
-        if &data[0..8] != Self::SPL_DISCRIMINATOR_SLICE {
-            return Err(KeyringProgramError::InvalidFormatForEntry.into());
-        }
-        // Read the length of the keystore entry
-        let entry_length = u32::from_le_bytes(data[8..12].try_into().unwrap());
-        let entry_end = entry_length as usize + 12;
-        let (key, key_end) = KeystoreEntryKey::unpack(&data[12..])?;
-        let config = KeystoreEntryConfig::unpack(&data[key_end..])?;
-        Ok((Self { key, config }, entry_end))
+    pub fn unpack(data: &[u8]) -> Result<Self, ProgramError> {
+        Self::try_from_slice(data).map_err(|_| KeyringProgramError::InvalidFormatForEntry.into())
     }
 }

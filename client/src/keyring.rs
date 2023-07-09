@@ -56,7 +56,11 @@ where
     /// Fetch the keystore account, unpacked
     pub async fn get_keystore(&self, authority: &Pubkey) -> Result<Keystore, KeyringError> {
         let keystore_account = self.get_keystore_account(authority).await?;
-        Keystore::unpack(&keystore_account.data).map_err(KeyringError::Program)
+        if keystore_account.data.is_empty() {
+            Ok(Keystore::default())
+        } else {
+            Keystore::unpack(&keystore_account.data).map_err(KeyringError::Program)
+        }
     }
 
     /// Construct a transaction from a list of instructions

@@ -96,7 +96,7 @@ async fn can_add_key() {
         .expect("Failed to create keystore");
 
     let new_key = Curve25519::new(Pubkey::new_unique().to_bytes());
-    let add_entry_data = new_key.to_keystore_entry();
+    let add_entry_data = new_key.to_keystore_entry().unwrap();
 
     // Fund rent for realloc
     keyring
@@ -145,7 +145,7 @@ async fn can_add_multiple_keys() {
         .expect("Failed to create keystore");
 
     let curve_key = Curve25519::new(Pubkey::new_unique().to_bytes());
-    let curve_entry_data = curve_key.to_keystore_entry();
+    let curve_entry_data = curve_key.to_keystore_entry().unwrap();
 
     // Fund rent for realloc
     keyring
@@ -169,7 +169,7 @@ async fn can_add_multiple_keys() {
     fake_rsa_key_bytes
         .copy_from_slice(&[Pubkey::new_unique().as_ref(), Pubkey::new_unique().as_ref()].concat());
     let rsa_key = Rsa::new(fake_rsa_key_bytes);
-    let rsa_entry_data = rsa_key.to_keystore_entry();
+    let rsa_entry_data = rsa_key.to_keystore_entry().unwrap();
 
     // Fund rent for realloc
     keyring
@@ -218,7 +218,7 @@ async fn can_remove_key() {
         .expect("Failed to create keystore");
 
     let curve_key = Curve25519::new(Pubkey::new_unique().to_bytes());
-    let curve_entry_data = curve_key.to_keystore_entry();
+    let curve_entry_data = curve_key.to_keystore_entry().unwrap();
 
     // Fund rent for realloc
     keyring
@@ -242,7 +242,7 @@ async fn can_remove_key() {
     fake_rsa_key_bytes
         .copy_from_slice(&[Pubkey::new_unique().as_ref(), Pubkey::new_unique().as_ref()].concat());
     let rsa_key = Rsa::new(fake_rsa_key_bytes);
-    let rsa_entry_data = rsa_key.to_keystore_entry();
+    let rsa_entry_data = rsa_key.to_keystore_entry().unwrap();
 
     // Fund rent for realloc
     keyring

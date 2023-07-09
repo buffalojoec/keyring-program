@@ -3,7 +3,7 @@ import {
   EncryptionAlgorithm,
   fromKeystoreEntrytoEncryptionAlgorithm,
 } from "./algorithm";
-import { packKeystoreEntry, unpackKeystoreEntry } from "./tlv";
+import { packKeystoreEntry, toBytesFromU32, unpackKeystoreEntry } from "./tlv";
 import { PROGRAM_ID } from ".";
 
 /**
@@ -79,8 +79,9 @@ export class Keystore {
 }
 
 export function packKeystore(keystore: Keystore): Buffer {
-  let offset = 0;
-  let data = Buffer.alloc(0);
+  let offset = 4;
+  let data = Buffer.alloc(4);
+  data.set(toBytesFromU32(keystore.entries.length));
   for (const entry of keystore.entries) {
     let packData = packKeystoreEntry(entry.toKeystoreEntry());
     let newData = Buffer.alloc(data.length + packData.length);
@@ -94,9 +95,11 @@ export function packKeystore(keystore: Keystore): Buffer {
 
 export function unpackKeystore(data: Buffer): Keystore {
   let entries: EncryptionAlgorithm[] = [];
-  let offset = 0;
+  let offset = 4; // Number of entries
+  let i = 1;
   while (offset < data.length) {
-    let [entry, entryEnd] = unpackKeystoreEntry(data.subarray(offset));
+    let sliceData = data.subarray(offset);
+    let [entry, entryEnd] = unpackKeystoreEntry(sliceData);
     entries.push(fromKeystoreEntrytoEncryptionAlgorithm(entry));
     offset += entryEnd;
   }

@@ -2,6 +2,7 @@
 
 use {
     crate::{error::KeyringProgramError, tlv::KeystoreEntry},
+    borsh::{BorshDeserialize, BorshSerialize},
     solana_program::{
         account_info::AccountInfo, entrypoint::ProgramResult, program_error::ProgramError,
         pubkey::Pubkey, rent::Rent,
@@ -27,7 +28,7 @@ use {
 ///                 * T: The configuration key (provided by sRFC workflow)
 ///                 * L: The configuration value length
 ///                 * T: The configuration value
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, BorshDeserialize, BorshSerialize)]
 pub struct Keystore {
     /// The keystore entries
     pub entries: Vec<KeystoreEntry>,
@@ -65,34 +66,23 @@ impl Keystore {
     /// Packs a `Keystore` into a slice of data
     pub fn pack(&self) -> Result<Vec<u8>, ProgramError> {
         let mut data = Vec::new();
-        for entry in &self.entries {
-            data.extend_from_slice(&entry.pack()?);
-        }
+        self.serialize(&mut data)?;
         Ok(data)
     }
 
     /// Unpacks a slice of data into a `Keystore`
     pub fn unpack(data: &[u8]) -> Result<Self, ProgramError> {
-        // Iteratively unpack keystore entries until there is no data left
-        let mut entries = vec![];
-        let mut data = data;
-        while !data.is_empty() {
-            let (entry, entry_end) = KeystoreEntry::unpack(data)?;
-            entries.push(entry);
-            data = &data[entry_end..];
-        }
-        Ok(Self { entries })
+        Self::try_from_slice(data).map_err(|_| KeyringProgramError::InvalidFormatForEntry.into())
     }
 
     /// Adds a new keystore entry
     pub fn add_entry(keystore_info: &AccountInfo, new_entry_data: &[u8]) -> ProgramResult {
-        let (new_entry, entry_end) = KeystoreEntry::unpack(new_entry_data)?;
-        // Ensure there are no leftover bytes
-        if entry_end != new_entry_data.len() {
-            return Err(KeyringProgramError::InvalidFormatForEntry.into());
-        }
+        let new_entry = KeystoreEntry::unpack(new_entry_data)?;
         let new_data = match keystore_info.data_is_empty() {
-            true => new_entry_data.to_vec(),
+            true => Keystore {
+                entries: vec![new_entry],
+            }
+            .pack()?,
             false => {
                 let data = keystore_info.try_borrow_data()?;
                 let mut keystore = Self::unpack(&data)?;
@@ -110,14 +100,7 @@ impl Keystore {
         authority_info: &AccountInfo,
         remove_entry_data: &[u8],
     ) -> ProgramResult {
-        let (remove_entry, entry_end) = KeystoreEntry::unpack(remove_entry_data)?;
-        // Ensure there are no leftover bytes
-        if entry_end != remove_entry_data.len() {
-            return Err(KeyringProgramError::InvalidFormatForEntry.into());
-        }
-        if keystore_info.data_is_empty() {
-            return Err(KeyringProgramError::KeystoreEntryNotFound.into());
-        }
+        let remove_entry = KeystoreEntry::unpack(remove_entry_data)?;
         let new_data = {
             let data = keystore_info.try_borrow_data()?;
             let mut keystore = Self::unpack(&data)?;
@@ -164,9 +147,7 @@ mod tests {
             buffer
         };
         let curve_25519_entry_data = {
-            let entry_length: u32 = curve_25519_key_data.len() as u32 + 1; // + 1 for empty `Option<T>`
             let mut buffer = Into::<[u8; 8]>::into(KeystoreEntry::SPL_DISCRIMINATOR).to_vec();
-            buffer.extend(entry_length.to_le_bytes().to_vec());
             buffer.extend(curve_25519_key_data.clone());
             buffer.push(0); // Empty `Option<T>` value
             buffer
@@ -189,9 +170,7 @@ mod tests {
             buffer
         };
         let rsa_entry_data = {
-            let entry_length: u32 = rsa_key_data.len() as u32 + 1; // + 1 for empty `Option<T>`
             let mut buffer = Into::<[u8; 8]>::into(KeystoreEntry::SPL_DISCRIMINATOR).to_vec();
-            buffer.extend(entry_length.to_le_bytes().to_vec());
             buffer.extend(rsa_key_data.clone());
             buffer.push(0); // Empty `Option<T>` value
             buffer
@@ -221,7 +200,6 @@ mod tests {
 
         let curve_25519_keystore_entry_key = KeystoreEntryKey {
             discriminator: CURVE_25519_KEY_DISCRIMINATOR,
-            key_length: 32,
             key: curve_25519_key,
         };
         assert_eq!(
@@ -229,10 +207,8 @@ mod tests {
             curve_25519_key_data,
             "Curve25519 key data packed incorrectly"
         );
-        let curve_25519_keystore_entry = KeystoreEntry {
-            key: curve_25519_keystore_entry_key,
-            config: None,
-        };
+        let curve_25519_keystore_entry =
+            KeystoreEntry::new(curve_25519_keystore_entry_key, None).unwrap();
         assert_eq!(
             curve_25519_keystore_entry.pack().unwrap(),
             curve_25519_entry_data,
@@ -243,7 +219,6 @@ mod tests {
 
         let rsa_keystore_entry_key = KeystoreEntryKey {
             discriminator: RSA_KEY_DISCRIMINATOR,
-            key_length: 32,
             key: rsa_key,
         };
         assert_eq!(
@@ -252,10 +227,7 @@ mod tests {
             "RSA key data packed incorrectly"
         );
 
-        let rsa_keystore_entry = KeystoreEntry {
-            key: rsa_keystore_entry_key,
-            config: None,
-        };
+        let rsa_keystore_entry = KeystoreEntry::new(rsa_keystore_entry_key, None).unwrap();
         assert_eq!(
             rsa_keystore_entry.pack().unwrap(),
             rsa_entry_data,
@@ -264,6 +236,7 @@ mod tests {
 
         let keystore_data = {
             let mut buffer = vec![];
+            buffer.extend(2u32.to_le_bytes());
             buffer.extend(curve_25519_entry_data);
             buffer.extend(rsa_entry_data);
             buffer

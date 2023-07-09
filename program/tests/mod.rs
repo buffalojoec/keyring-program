@@ -61,13 +61,13 @@ async fn test_add_entry() {
     let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
 
     let curve_key = Curve25519::new(Pubkey::new_unique().to_bytes());
-    let curve_entry_data = curve_key.to_keystore_entry();
+    let curve_entry_data = curve_key.to_keystore_entry().unwrap();
 
     let mut fake_rsa_key_bytes = [0u8; 64];
     fake_rsa_key_bytes
         .copy_from_slice(&[Pubkey::new_unique().as_ref(), Pubkey::new_unique().as_ref()].concat());
     let rsa_key = Rsa::new(fake_rsa_key_bytes);
-    let rsa_entry_data = rsa_key.to_keystore_entry();
+    let rsa_entry_data = rsa_key.to_keystore_entry().unwrap();
 
     let transaction = Transaction::new_signed_with_payer(
         &[
@@ -116,13 +116,13 @@ async fn test_remove_entry() {
     let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
 
     let curve_key = Curve25519::new(Pubkey::new_unique().to_bytes());
-    let curve_entry_data = curve_key.to_keystore_entry();
+    let curve_entry_data = curve_key.to_keystore_entry().unwrap();
 
     let mut fake_rsa_key_bytes = [0u8; 64];
     fake_rsa_key_bytes
         .copy_from_slice(&[Pubkey::new_unique().as_ref(), Pubkey::new_unique().as_ref()].concat());
     let rsa_key = Rsa::new(fake_rsa_key_bytes);
-    let rsa_entry_data = rsa_key.to_keystore_entry();
+    let rsa_entry_data = rsa_key.to_keystore_entry().unwrap();
 
     let transaction = Transaction::new_signed_with_payer(
         &[
