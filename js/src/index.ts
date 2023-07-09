@@ -10,5 +10,5 @@ import { PublicKey } from "@solana/web3.js";
  * The Keyring Program ID
  */
 export const PROGRAM_ID: PublicKey = new PublicKey(
-  "4ZXqc9x6DkRthFYxSwTqfDKpX55FfyckoXAdS34xECPu",
+  "8FSgMvQXodCVyd2fbFhTsEDz3DrMK4aXcyUME3Yeuhc3",
 );

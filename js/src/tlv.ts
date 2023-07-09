@@ -6,6 +6,11 @@ import {
 } from "./algorithm";
 
 /**
+ * Length of the 8-byte TLV discriminator plus a `u32` length value
+ */
+const DISCRIM_PLUS_LENGTH = 12;
+
+/**
  * Converts a number to a Buffer for a u32
  * @param num A u32 number
  * @returns Buffer
@@ -48,7 +53,7 @@ export type KeystoreEntryConfigEntry = {
 export function keystoreEntryConfigEntryLength(
   configEntry: KeystoreEntryConfigEntry,
 ): number {
-  return 12 + configEntry.valueLength;
+  return DISCRIM_PLUS_LENGTH + configEntry.valueLength;
 }
 
 /**
@@ -59,10 +64,10 @@ export function keystoreEntryConfigEntryLength(
 export function packKeystoreEntryConfigEntry(
   configEntry: KeystoreEntryConfigEntry,
 ): Buffer {
-  const data = Buffer.alloc(12 + configEntry.valueLength);
+  const data = Buffer.alloc(DISCRIM_PLUS_LENGTH + configEntry.valueLength);
   data.set(configEntry.key);
   data.set(toBytesFromU32(configEntry.valueLength), 8);
-  data.set(configEntry.value, 12);
+  data.set(configEntry.value, DISCRIM_PLUS_LENGTH);
   return data;
 }
 
@@ -75,16 +80,16 @@ export function unpackKeystoreEntryConfigEntry(
   data: Buffer,
 ): [KeystoreEntryConfigEntry, number] {
   // If the data isn't at least 12 bytes long, it's invalid
-  if (data.length < 12) {
+  if (data.length < DISCRIM_PLUS_LENGTH) {
     throw new Error("Invalid format for config entry");
   }
   // Take the configuration entry key
   const key = data.subarray(0, 8);
   // Take the length of the configuration entry
-  const valueLength = toU32FromBytes(data.slice(8, 12));
-  const configEntryEnd = valueLength + 12;
+  const valueLength = toU32FromBytes(data.slice(8, DISCRIM_PLUS_LENGTH));
+  const configEntryEnd = valueLength + DISCRIM_PLUS_LENGTH;
   // Take the configuration entry value
-  const value = data.subarray(12, configEntryEnd);
+  const value = data.subarray(DISCRIM_PLUS_LENGTH, configEntryEnd);
   return [
     {
       key,
@@ -130,7 +135,7 @@ export type KeystoreEntryConfig = {
  * @returns Length of the `KeystoreEntryConfig`
  */
 export function keystoreEntryConfigLength(config: KeystoreEntryConfig): number {
-  let len = 12;
+  let len = DISCRIM_PLUS_LENGTH;
   for (const configEntry of config.configList) {
     len += keystoreEntryConfigEntryLength(configEntry);
   }
@@ -143,7 +148,7 @@ export function keystoreEntryConfigLength(config: KeystoreEntryConfig): number {
  * @returns Buffer
  */
 export function packKeystoreEntryConfig(config: KeystoreEntryConfig): Buffer {
-  const data = Buffer.alloc(12);
+  const data = Buffer.alloc(DISCRIM_PLUS_LENGTH);
   // If there are no config entries, return a single zero in the array
   if (config.configList.length === 0) {
     return Buffer.from([0]);
@@ -162,7 +167,7 @@ export function packKeystoreEntryConfig(config: KeystoreEntryConfig): Buffer {
   // Pack the length of the config data
   data.set(toBytesFromU32(configData.length));
   // Concatenate the config data
-  data.set(configData, 12);
+  data.set(configData, DISCRIM_PLUS_LENGTH);
   return data;
 }
 
@@ -180,17 +185,17 @@ export function unpackKeystoreEntryConfig(
   }
   // If the data isn't at least 12 bytes long, it's invalid
   // (discriminator, length, config)
-  if (data[0] !== 0 && data.length < 12) {
+  if (data[0] !== 0 && data.length < DISCRIM_PLUS_LENGTH) {
     throw new Error("Invalid format for config");
   }
   // Read the length of the config
-  const configEnd = data[8] + 12;
+  const configEnd = data[8] + DISCRIM_PLUS_LENGTH;
   // Ensure there are no leftover bytes
   if (configEnd !== data.length) {
     throw new Error("Invalid format for config");
   }
   // Take the config data from the slice
-  const configData = data.subarray(12);
+  const configData = data.subarray(DISCRIM_PLUS_LENGTH);
   // Unpack the config data into a vector of config entries
   const configList = unpackKeystoreEntryConfigEntryToList(configData);
   return {
@@ -219,7 +224,7 @@ export type KeystoreEntryKey = {
  * @returns Length of the `KeystoreEntryKey`
  */
 export function keystoreEntryKeyLength(key: KeystoreEntryKey): number {
-  return 12 + key.keyLength;
+  return DISCRIM_PLUS_LENGTH + key.keyLength;
 }
 
 /**
@@ -228,10 +233,10 @@ export function keystoreEntryKeyLength(key: KeystoreEntryKey): number {
  * @returns Buffer
  */
 export function packKeystoreEntryKey(key: KeystoreEntryKey): Buffer {
-  const data = Buffer.alloc(12 + key.keyLength);
+  const data = Buffer.alloc(DISCRIM_PLUS_LENGTH + key.keyLength);
   data.set(key.discriminator);
   data.set(toBytesFromU32(key.keyLength), 8);
-  data.set(key.key, 12);
+  data.set(key.key, DISCRIM_PLUS_LENGTH);
   return data;
 }
 
@@ -245,23 +250,23 @@ export function unpackKeystoreEntryKey(
 ): [KeystoreEntryKey, number] {
   // If the data isn't at least 12 bytes long, it's invalid
   // (discriminator, length, key)
-  if (data.length < 12) {
+  if (data.length < DISCRIM_PLUS_LENGTH) {
     throw new Error("Invalid format for key");
   }
   // Take the key discriminator
   const discriminator = data.subarray(0, 8);
   // Take the length of the key
-  const keyLength = toU32FromBytes(data.subarray(8, 12));
-  const keyEnd = keyLength + 12;
+  const keyLength = toU32FromBytes(data.subarray(8, DISCRIM_PLUS_LENGTH));
+  const keyEnd = keyLength + DISCRIM_PLUS_LENGTH;
   // Take the key data
-  const key = data.subarray(12, keyEnd);
+  const key = data.subarray(DISCRIM_PLUS_LENGTH, keyEnd);
   return [
     {
       discriminator,
       keyLength,
       key,
     },
-    keyEnd + 12,
+    keyEnd + DISCRIM_PLUS_LENGTH,
   ];
 }
 
@@ -287,31 +292,31 @@ export function packKeystoreEntry(entry: KeystoreEntry): Buffer {
   // Check if the entry has additional configurations
   if (entry.config) {
     const keyLength = keystoreEntryKeyLength(entry.key);
-    const keyEnd = 12 + keyLength;
+    const keyEnd = DISCRIM_PLUS_LENGTH + keyLength;
     const entryLength = keyLength + keystoreEntryConfigLength(entry.config);
     // Initialize the data
-    const data = Buffer.alloc(12 + entryLength);
+    const data = Buffer.alloc(DISCRIM_PLUS_LENGTH + entryLength);
     // Pack the entry discriminator
     data.set(KEYSTORE_ENTRY_DISCRIMINATOR);
     // Pack the entry length
     data.set(toBytesFromU32(entryLength), 8);
     // Pack the key
-    data.set(packKeystoreEntryKey(entry.key), 12);
+    data.set(packKeystoreEntryKey(entry.key), DISCRIM_PLUS_LENGTH);
     // Pack the config
     data.set(packKeystoreEntryConfig(entry.config), keyEnd);
     return data;
   } else {
     const keyLength = keystoreEntryKeyLength(entry.key);
-    const keyEnd = 12 + keyLength;
+    const keyEnd = DISCRIM_PLUS_LENGTH + keyLength;
     const entryLength = keyLength + 1;
     // Initialize the data
-    const data = Buffer.alloc(12 + entryLength);
+    const data = Buffer.alloc(DISCRIM_PLUS_LENGTH + entryLength);
     // Pack the entry discriminator
     data.set(KEYSTORE_ENTRY_DISCRIMINATOR);
     // Pack the entry length
     data.set(toBytesFromU32(entryLength), 8);
     // Pack the key
-    data.set(packKeystoreEntryKey(entry.key), 12);
+    data.set(packKeystoreEntryKey(entry.key), DISCRIM_PLUS_LENGTH);
     // Pack a single zero
     data.set(NO_CONFIGURATIONS_DISCRIMINATOR, keyEnd);
     return data;
@@ -326,7 +331,7 @@ export function packKeystoreEntry(entry: KeystoreEntry): Buffer {
 export function unpackKeystoreEntry(data: Buffer): [KeystoreEntry, number] {
   // If the data isn't at least 12 bytes long, it's invalid
   // (discriminator, length, key)
-  if (data.length < 12) {
+  if (data.length < DISCRIM_PLUS_LENGTH) {
     throw new Error("Invalid format for entry");
   }
   // If the first 8 bytes of the slice don't match the unique TLV discriminator
@@ -335,9 +340,11 @@ export function unpackKeystoreEntry(data: Buffer): [KeystoreEntry, number] {
     throw new Error("Invalid format for entry");
   }
   // Read the length of the keystore entry
-  const entryLength = toU32FromBytes(data.subarray(8, 12));
-  const entryEnd = entryLength + 12;
-  const [key, keyEnd] = unpackKeystoreEntryKey(data.subarray(12, entryEnd));
+  const entryLength = toU32FromBytes(data.subarray(8, DISCRIM_PLUS_LENGTH));
+  const entryEnd = entryLength + DISCRIM_PLUS_LENGTH;
+  const [key, keyEnd] = unpackKeystoreEntryKey(
+    data.subarray(DISCRIM_PLUS_LENGTH, entryEnd),
+  );
   const config = unpackKeystoreEntryConfig(data.subarray(keyEnd, entryEnd));
   return [
     {

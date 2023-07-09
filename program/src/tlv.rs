@@ -6,6 +6,9 @@ use {
     spl_discriminator::{ArrayDiscriminator, SplDiscriminate},
 };
 
+/// Length of the 8-byte TLV discriminator plus a `u32` length value
+const DISCRIM_PLUS_LENGTH: usize = 12;
+
 /// Key-value entry for additional encryption algorithm configurations
 ///
 /// Note: The "key" for this key-value entry is used as the TLV discriminator
@@ -22,7 +25,7 @@ pub struct KeystoreEntryConfigEntry {
 impl KeystoreEntryConfigEntry {
     /// Returns the length of a `KeystoreEntryConfigEntry`
     pub fn data_len(&self) -> usize {
-        12 + self.value_length as usize
+        DISCRIM_PLUS_LENGTH + self.value_length as usize
     }
 
     /// Packs a `KeystoreEntryConfigEntry` into a vector of bytes
@@ -37,16 +40,16 @@ impl KeystoreEntryConfigEntry {
     /// Unpacks a slice of data into a `KeystoreEntryConfigEntry`
     pub fn unpack(data: &[u8]) -> Result<(Self, usize), ProgramError> {
         // If the data isn't at least 12 bytes long, it's invalid
-        if data.len() < 12 {
+        if data.len() < DISCRIM_PLUS_LENGTH {
             return Err(KeyringProgramError::InvalidFormatForConfigEntry.into());
         }
         // Take the configuration entry key
         let key = data[0..8].try_into().unwrap();
         // Take the length of the configuration entry
-        let value_length = u32::from_le_bytes(data[8..12].try_into().unwrap());
-        let config_entry_end = value_length as usize + 12;
+        let value_length = u32::from_le_bytes(data[8..DISCRIM_PLUS_LENGTH].try_into().unwrap());
+        let config_entry_end = value_length as usize + DISCRIM_PLUS_LENGTH;
         // Take the configuration entry value
-        let value = data[12..config_entry_end].to_vec();
+        let value = data[DISCRIM_PLUS_LENGTH..config_entry_end].to_vec();
         Ok((
             Self {
                 key,
@@ -81,7 +84,7 @@ pub struct KeystoreEntryConfig(pub Vec<KeystoreEntryConfigEntry>);
 impl KeystoreEntryConfig {
     /// Returns the length of a `KeystoreEntryConfig`
     pub fn data_len(&self) -> usize {
-        let mut len = 12;
+        let mut len = DISCRIM_PLUS_LENGTH;
         for config_entry in &self.0 {
             len += config_entry.data_len();
         }
@@ -105,20 +108,22 @@ impl KeystoreEntryConfig {
         }
         // If the data isn't at least 12 bytes long, it's invalid
         // (discriminator, length, config)
-        if data[0] != 0 && data.len() < 12 {
+        if data[0] != 0 && data.len() < DISCRIM_PLUS_LENGTH {
             return Err(KeyringProgramError::InvalidFormatForConfig.into());
         }
         if &data[0..8] != Self::SPL_DISCRIMINATOR_SLICE {
             return Err(KeyringProgramError::InvalidFormatForConfig.into());
         }
         // Read the length of the config
-        let config_end = u32::from_le_bytes(data[8..12].try_into().unwrap()) as usize + 12;
+        let config_end = u32::from_le_bytes(data[8..DISCRIM_PLUS_LENGTH].try_into().unwrap())
+            as usize
+            + DISCRIM_PLUS_LENGTH;
         // Ensure there are no leftover bytes
         if config_end != data.len() {
             return Err(KeyringProgramError::InvalidFormatForConfig.into());
         }
         // Take the config data from the slice
-        let config_data = &data[12..];
+        let config_data = &data[DISCRIM_PLUS_LENGTH..];
         // Unpack the config data into a vector of config entries
         let config_vec = KeystoreEntryConfigEntry::unpack_to_vec(config_data)?;
         Ok(Some(Self(config_vec)))
@@ -141,7 +146,7 @@ pub struct KeystoreEntryKey {
 impl KeystoreEntryKey {
     /// Returns the length of a `KeystoreEntryKey`
     pub fn data_len(&self) -> usize {
-        12 + self.key.len()
+        DISCRIM_PLUS_LENGTH + self.key.len()
     }
 
     /// Packs a `KeystoreEntryKey` into a vector of bytes
@@ -157,23 +162,23 @@ impl KeystoreEntryKey {
     pub fn unpack(data: &[u8]) -> Result<(Self, usize), ProgramError> {
         // If the data isn't at least 12 bytes long, it's invalid
         // (discriminator, length, key)
-        if data.len() < 12 {
+        if data.len() < DISCRIM_PLUS_LENGTH {
             return Err(KeyringProgramError::InvalidFormatForKey.into());
         }
         // Take the key discriminator
         let discriminator = data[0..8].try_into().unwrap();
         // Take the length of the key
-        let key_length = u32::from_le_bytes(data[8..12].try_into().unwrap());
-        let key_end = key_length as usize + 12;
+        let key_length = u32::from_le_bytes(data[8..DISCRIM_PLUS_LENGTH].try_into().unwrap());
+        let key_end = key_length as usize + DISCRIM_PLUS_LENGTH;
         // Take the key data
-        let key = data[12..key_end].to_vec();
+        let key = data[DISCRIM_PLUS_LENGTH..key_end].to_vec();
         Ok((
             Self {
                 discriminator,
                 key_length,
                 key,
             },
-            key_end + 12,
+            key_end + DISCRIM_PLUS_LENGTH,
         ))
     }
 }
@@ -193,7 +198,7 @@ pub struct KeystoreEntry {
 impl KeystoreEntry {
     /// Returns the length of the keystore entry
     pub fn data_len(&self) -> usize {
-        let mut len = 12 + self.key.data_len();
+        let mut len = DISCRIM_PLUS_LENGTH + self.key.data_len();
         if let Some(config) = &self.config {
             len += config.data_len();
         }
@@ -207,7 +212,7 @@ impl KeystoreEntry {
         data.extend_from_slice(Self::SPL_DISCRIMINATOR_SLICE);
         // Get the length of the key and its end index
         let key_length = self.key.key_length;
-        let key_end: usize = 12 + key_length as usize;
+        let key_end: usize = DISCRIM_PLUS_LENGTH + key_length as usize;
         // Check if the entry has additional configurations
         match &self.config {
             Some(config) => {
@@ -236,7 +241,7 @@ impl KeystoreEntry {
     pub fn unpack(data: &[u8]) -> Result<(Self, usize), ProgramError> {
         // If the data isn't at least 12 bytes long, it's invalid
         // (discriminator, length, entry data)
-        if data.len() < 12 {
+        if data.len() < DISCRIM_PLUS_LENGTH {
             return Err(KeyringProgramError::InvalidFormatForEntry.into());
         }
         // If the first 8 bytes of the slice don't match the unique TLV
@@ -245,9 +250,9 @@ impl KeystoreEntry {
             return Err(KeyringProgramError::InvalidFormatForEntry.into());
         }
         // Read the length of the keystore entry
-        let entry_length = u32::from_le_bytes(data[8..12].try_into().unwrap());
-        let entry_end = entry_length as usize + 12;
-        let (key, key_end) = KeystoreEntryKey::unpack(&data[12..])?;
+        let entry_length = u32::from_le_bytes(data[8..DISCRIM_PLUS_LENGTH].try_into().unwrap());
+        let entry_end = entry_length as usize + DISCRIM_PLUS_LENGTH;
+        let (key, key_end) = KeystoreEntryKey::unpack(&data[DISCRIM_PLUS_LENGTH..])?;
         let config = KeystoreEntryConfig::unpack(&data[key_end..])?;
         Ok((Self { key, config }, entry_end))
     }
