@@ -7,6 +7,9 @@ use {
     spl_discriminator::{ArrayDiscriminator, SplDiscriminate},
 };
 
+/// Length of the 8-byte TLV discriminator plus a `u32` length value
+const DISCRIM_PLUS_LENGTH: usize = 12;
+
 /// Key-value entry for additional encryption algorithm configurations
 ///
 /// Note: The "key" for this key-value entry is used as the TLV discriminator
@@ -21,7 +24,7 @@ pub struct KeystoreEntryConfigEntry {
 impl KeystoreEntryConfigEntry {
     /// Returns the length of a `KeystoreEntryConfigEntry`
     pub fn data_len(&self) -> usize {
-        12 + self.value.len()
+        DISCRIM_PLUS_LENGTH + self.value.len()
     }
 
     /// Packs a `KeystoreEntryConfigEntry` into a vector of bytes
@@ -54,7 +57,7 @@ pub struct KeystoreEntryConfig(pub Vec<KeystoreEntryConfigEntry>);
 impl KeystoreEntryConfig {
     /// Returns the length of a `KeystoreEntryConfig`
     pub fn data_len(&self) -> usize {
-        let mut len = 12;
+        let mut len = DISCRIM_PLUS_LENGTH;
         for config_entry in &self.0 {
             len += config_entry.data_len();
         }
@@ -98,7 +101,7 @@ pub struct KeystoreEntryKey {
 impl KeystoreEntryKey {
     /// Returns the length of a `KeystoreEntryKey`
     pub fn data_len(&self) -> usize {
-        12 + self.key.len()
+        DISCRIM_PLUS_LENGTH + self.key.len()
     }
 
     /// Packs a `KeystoreEntryKey` into a vector of bytes
@@ -143,7 +146,7 @@ impl KeystoreEntry {
 
     /// Returns the length of the keystore entry
     pub fn data_len(&self) -> usize {
-        let mut len = 12 + self.key.data_len();
+        let mut len = DISCRIM_PLUS_LENGTH + self.key.data_len();
         if let Some(config) = &self.config {
             len += config.data_len();
         }
