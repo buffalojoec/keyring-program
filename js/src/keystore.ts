@@ -1,5 +1,3 @@
-import { deserialize as borshDeserialize } from "borsh";
-
 /**
  * A keystore
  */
