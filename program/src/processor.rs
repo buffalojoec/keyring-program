@@ -1,7 +1,7 @@
 //! Program processor
 
 use {
-    crate::{instruction::KeyringProgramInstruction, state::Keystore},
+    crate::{instruction::KeyringProgramInstruction, state::Keyring},
     solana_program::{
         account_info::{next_account_info, AccountInfo},
         entrypoint::ProgramResult,
@@ -21,93 +21,59 @@ fn check_authority(authority_info: &AccountInfo) -> ProgramResult {
     Ok(())
 }
 
-/// Processes a `CreateKeystore` instruction.
-pub fn process_create_keystore(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
+/// Processes a `CreateKeyring` instruction.
+pub fn process_create_keyring(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
     let account_info_iter = &mut accounts.iter();
 
-    let keystore_info = next_account_info(account_info_iter)?;
+    let keyring_info = next_account_info(account_info_iter)?;
     let authority_info = next_account_info(account_info_iter)?;
     let _system_program_info = next_account_info(account_info_iter)?;
 
     let bump_seed = {
         check_authority(authority_info)?;
-        Keystore::check_pda(program_id, authority_info.key, keystore_info.key)?
+        Keyring::check_pda(program_id, authority_info.key, keyring_info.key)?
     };
 
-    let mut signer_seeds = Keystore::seeds(authority_info.key);
+    let mut signer_seeds = Keyring::seeds(authority_info.key);
     let bump_signer_seed = [bump_seed];
     signer_seeds.push(&bump_signer_seed);
 
     invoke_signed(
         &system_instruction::create_account(
             authority_info.key,
-            keystore_info.key,
+            keyring_info.key,
             Rent::default().minimum_balance(0),
             0u64,
             program_id,
         ),
-        &[authority_info.clone(), keystore_info.clone()],
+        &[authority_info.clone(), keyring_info.clone()],
         &[&signer_seeds],
     )?;
 
     Ok(())
 }
 
-/// Processes a `AddKey` instruction.
-pub fn process_add_entry(
+/// Processes a `UpdateKeyring` instruction.
+///
+/// Simply overwrites the entire account buffer with the new data.
+pub fn process_update_keyring(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
-    add_entry_data: Vec<u8>,
+    data: Vec<u8>,
 ) -> ProgramResult {
     let account_info_iter = &mut accounts.iter();
 
-    let keystore_info = next_account_info(account_info_iter)?;
+    let keyring_info = next_account_info(account_info_iter)?;
     let authority_info = next_account_info(account_info_iter)?;
 
     {
-        Keystore::check_pda(program_id, authority_info.key, keystore_info.key)?;
+        Keyring::check_pda(program_id, authority_info.key, keyring_info.key)?;
         check_authority(authority_info)?;
     }
 
-    msg!("Received request to add {} bytes", add_entry_data.len());
-
-    Keystore::add_entry(keystore_info, &add_entry_data)?;
-
-    msg!(
-        "Added entry to keystore. New length: {}",
-        keystore_info.data_len()
-    );
-
-    Ok(())
-}
-
-/// Processes a `RemoveKey` instruction.
-pub fn process_remove_entry(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
-    remove_entry_data: Vec<u8>,
-) -> ProgramResult {
-    let account_info_iter = &mut accounts.iter();
-
-    let keystore_info = next_account_info(account_info_iter)?;
-    let authority_info = next_account_info(account_info_iter)?;
-
-    {
-        Keystore::check_pda(program_id, authority_info.key, keystore_info.key)?;
-        check_authority(authority_info)?;
-    }
-
-    msg!(
-        "Received request to remove {} bytes",
-        remove_entry_data.len()
-    );
-
-    Keystore::remove_entry(keystore_info, authority_info, &remove_entry_data)?;
-
-    msg!(
-        "Removed entry from keystore. New length: {}",
-        keystore_info.data_len()
-    );
+    let new_len = data.len();
+    keyring_info.realloc(new_len, true)?;
+    keyring_info.try_borrow_mut_data()?[..].copy_from_slice(&data);
 
     Ok(())
 }
@@ -117,17 +83,13 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> P
     let instruction = KeyringProgramInstruction::unpack(input)?;
 
     match instruction {
-        KeyringProgramInstruction::CreateKeystore {} => {
-            msg!("Instruction: CreateKeystore");
-            process_create_keystore(program_id, accounts)
+        KeyringProgramInstruction::CreateKeyring {} => {
+            msg!("Instruction: CreateKeyring");
+            process_create_keyring(program_id, accounts)
         }
-        KeyringProgramInstruction::AddEntry { add_entry_data } => {
-            msg!("Instruction: AddKey");
-            process_add_entry(program_id, accounts, add_entry_data)
-        }
-        KeyringProgramInstruction::RemoveEntry { remove_entry_data } => {
-            msg!("Instruction: RemoveKey");
-            process_remove_entry(program_id, accounts, remove_entry_data)
+        KeyringProgramInstruction::UpdateKeyring { data } => {
+            msg!("Instruction: UpdateKeyring");
+            process_update_keyring(program_id, accounts, data)
         }
     }
 }

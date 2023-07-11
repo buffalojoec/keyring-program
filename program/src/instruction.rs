@@ -1,7 +1,7 @@
 //! Keyring Program instructions
 
 use {
-    crate::state::Keystore,
+    crate::state::Keyring,
     solana_program::{
         instruction::{AccountMeta, Instruction},
         program_error::ProgramError,
@@ -13,33 +13,27 @@ use {
 /// Keyring Program instructions.
 #[derive(Clone, Debug, PartialEq)]
 pub enum KeyringProgramInstruction {
-    /// Create a new keystore
+    /// Create a new keyring account for the keystore
     ///
     /// Accounts expected by this instruction:
     ///
-    ///   0. `[w]` Keystore
+    ///   0. `[w]` Keyring
     ///   1. `[s]` Authority
-    CreateKeystore,
-    /// Add a key to the keystore
+    CreateKeyring,
+    /// Update the keyring with new data
+    ///
+    /// This can either add or remove a key from the keystore.
+    /// Since all serialization is off-chain, the program will write whatever
+    /// bytes are passed into this instruction to the keystore, and overwrite
+    /// the entire data buffer of the keyring account.
     ///
     /// Accounts expected by this instruction:
     ///
-    ///   0. `[w]` Keystore
+    ///   0. `[w]` Keyring
     ///   1. `[s]` Authority
-    AddEntry {
+    UpdateKeyring {
         /// Vector of bytes to be passed in as a new TLV-based keystore entry
-        add_entry_data: Vec<u8>,
-    },
-    /// Remove a key from the keystore
-    ///
-    /// Accounts expected by this instruction:
-    ///
-    ///   0. `[w]` Keystore
-    ///   1. `[s]` Authority
-    RemoveEntry {
-        /// Vector of bytes to be passed in as the TLV-based keystore entry to
-        /// delete
-        remove_entry_data: Vec<u8>,
+        data: Vec<u8>,
     },
 }
 
@@ -48,16 +42,12 @@ impl KeyringProgramInstruction {
     pub fn pack(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         match self {
-            KeyringProgramInstruction::CreateKeystore {} => {
+            KeyringProgramInstruction::CreateKeyring {} => {
                 buf.push(0);
             }
-            KeyringProgramInstruction::AddEntry { add_entry_data } => {
+            KeyringProgramInstruction::UpdateKeyring { data } => {
                 buf.push(1);
-                buf.extend_from_slice(add_entry_data);
-            }
-            KeyringProgramInstruction::RemoveEntry { remove_entry_data } => {
-                buf.push(2);
-                buf.extend_from_slice(remove_entry_data);
+                buf.extend_from_slice(data);
             }
         }
         buf
@@ -69,29 +59,26 @@ impl KeyringProgramInstruction {
             .split_first()
             .ok_or(ProgramError::InvalidInstructionData)?;
         Ok(match instruction {
-            0 => KeyringProgramInstruction::CreateKeystore,
-            1 => KeyringProgramInstruction::AddEntry {
-                add_entry_data: rest.to_vec(),
-            },
-            2 => KeyringProgramInstruction::RemoveEntry {
-                remove_entry_data: rest.to_vec(),
+            0 => KeyringProgramInstruction::CreateKeyring,
+            1 => KeyringProgramInstruction::UpdateKeyring {
+                data: rest.to_vec(),
             },
             _ => return Err(ProgramError::InvalidInstructionData),
         })
     }
 }
 
-/// Creates a 'CreateKeystore' instruction.
-pub fn create_keystore(
+/// Creates a 'CreateKeyring' instruction.
+pub fn create_keyring(
     program_id: &Pubkey,
     authority: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
-    let keystore = Keystore::pda(program_id, authority).0;
+    let keyring = Keyring::pda(program_id, authority).0;
 
-    let data = KeyringProgramInstruction::CreateKeystore {}.pack();
+    let data = KeyringProgramInstruction::CreateKeyring {}.pack();
 
     let accounts = vec![
-        AccountMeta::new(keystore, false),
+        AccountMeta::new(keyring, false),
         AccountMeta::new(*authority, true),
         AccountMeta::new(system_program::id(), false),
     ];
@@ -103,40 +90,18 @@ pub fn create_keystore(
     })
 }
 
-/// Creates an 'AddKey' instruction.
-pub fn add_entry(
+/// Creates an 'UpdateKeyring' instruction.
+pub fn update_keyring(
     program_id: &Pubkey,
     authority: &Pubkey,
-    add_entry_data: Vec<u8>,
+    data: Vec<u8>,
 ) -> Result<Instruction, ProgramError> {
-    let keystore = Keystore::pda(program_id, authority).0;
+    let keyring = Keyring::pda(program_id, authority).0;
 
-    let data = KeyringProgramInstruction::AddEntry { add_entry_data }.pack();
+    let data = KeyringProgramInstruction::UpdateKeyring { data }.pack();
 
     let accounts = vec![
-        AccountMeta::new(keystore, false),
-        AccountMeta::new(*authority, true),
-    ];
-
-    Ok(Instruction {
-        program_id: *program_id,
-        accounts,
-        data,
-    })
-}
-
-/// Creates a 'RemoveKey' instruction.
-pub fn remove_entry(
-    program_id: &Pubkey,
-    authority: &Pubkey,
-    remove_entry_data: Vec<u8>,
-) -> Result<Instruction, ProgramError> {
-    let keystore = Keystore::pda(program_id, authority).0;
-
-    let data = KeyringProgramInstruction::RemoveEntry { remove_entry_data }.pack();
-
-    let accounts = vec![
-        AccountMeta::new(keystore, false),
+        AccountMeta::new(keyring, false),
         AccountMeta::new(*authority, true),
     ];
 
@@ -152,40 +117,27 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_create_keystore() {
+    fn create_keyring_instruction() {
         let program_id = Pubkey::new_unique();
         let authority = Pubkey::new_unique();
 
-        let instruction = create_keystore(&program_id, &authority).unwrap();
+        let instruction = create_keyring(&program_id, &authority).unwrap();
         assert_eq!(
             instruction.data,
-            KeyringProgramInstruction::CreateKeystore {}.pack()
+            KeyringProgramInstruction::CreateKeyring {}.pack()
         );
     }
 
     #[test]
-    fn test_add_entry() {
+    fn update_keyring_instruction() {
         let program_id = Pubkey::new_unique();
         let authority = Pubkey::new_unique();
-        let add_entry_data = vec![1, 2, 3];
+        let data = vec![1, 2, 3];
 
-        let instruction = add_entry(&program_id, &authority, add_entry_data.clone()).unwrap();
+        let instruction = update_keyring(&program_id, &authority, data.clone()).unwrap();
         assert_eq!(
             instruction.data,
-            KeyringProgramInstruction::AddEntry { add_entry_data }.pack()
-        );
-    }
-
-    #[test]
-    fn test_remove_entry() {
-        let program_id = Pubkey::new_unique();
-        let authority = Pubkey::new_unique();
-        let remove_entry_data = vec![1, 2, 3];
-
-        let instruction = remove_entry(&program_id, &authority, remove_entry_data.clone()).unwrap();
-        assert_eq!(
-            instruction.data,
-            KeyringProgramInstruction::RemoveEntry { remove_entry_data }.pack()
+            KeyringProgramInstruction::UpdateKeyring { data }.pack()
         );
     }
 }

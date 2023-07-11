@@ -1,12 +1,11 @@
 //! Program entrypoint
 
 use {
-    crate::{error::KeyringProgramError, processor},
+    crate::processor,
     solana_program::{
         account_info::AccountInfo,
         entrypoint,
-        entrypoint::ProgramResult,
-        program_error::PrintProgramError,
+        entrypoint::ProgramResult, 
         pubkey::Pubkey,
     },
 };
@@ -17,9 +16,6 @@ fn process_instruction(
     accounts: &[AccountInfo],
     instruction_data: &[u8],
 ) -> ProgramResult {
-    if let Err(error) = processor::process(program_id, accounts, instruction_data) {
-        error.print::<KeyringProgramError>();
-        return Err(error);
-    }
+    processor::process(program_id, accounts, instruction_data)?;
     Ok(())
 }

@@ -5,6 +5,7 @@ use {
         ProgramTest,
     },
     solana_sdk::{
+        borsh::get_instance_packed_len,
         instruction::Instruction,
         pubkey::Pubkey,
         rent::Rent,
@@ -12,10 +13,9 @@ use {
         system_instruction,
     },
     spl_keyring_client::{
-        algorithm::{Curve25519, EncryptionAlgorithm, Rsa},
         keyring::Keyring,
+        keystore::{Curve25519, EncryptionKeyConfig, Keystore, Rsa},
     },
-    spl_keyring_program::state::Keystore,
     spl_token_client::client::{
         ProgramBanksClient, ProgramBanksClientProcessTransaction, ProgramClient,
     },
@@ -59,51 +59,55 @@ fn keypair_clone(kp: &Keypair) -> Keypair {
     Keypair::from_bytes(&kp.to_bytes()).expect("failed to copy keypair")
 }
 
-fn get_fund_rent_instruction(authority: &Pubkey, new_space: usize) -> Instruction {
+fn get_fund_rent_instruction(
+    keyring: &Keyring<ProgramBanksClientProcessTransaction>,
+    authority: &Pubkey,
+    new_space: usize,
+) -> Instruction {
     let lamports = Rent::default().minimum_balance(new_space);
     system_instruction::transfer(
         authority,
-        &Keystore::pda(&spl_keyring_program::id(), authority).0,
+        &keyring.get_keyring_address(authority).0,
         lamports,
     )
 }
 
 #[tokio::test]
-async fn can_create_keystore() {
+async fn can_create_keyring() {
     let TestContext { keyring, authority } = TestContext::new().await;
 
-    // Create a keystore
+    // Create a keyring
     keyring
-        .create_keystore(&authority)
+        .create_keyring(&authority)
         .await
-        .expect("Failed to create keystore");
+        .expect("Failed to create keyring");
 
-    // Check to make sure the keystore was created
-    let _keystore = keyring
+    // Check to make sure the keyring was created
+    let _keyring = keyring
         .get_keystore(&authority.pubkey())
         .await
-        .expect("Failed to fetch keystore");
+        .expect("Failed to fetch keyring");
 }
 
 #[tokio::test]
 async fn can_add_key() {
     let TestContext { keyring, authority } = TestContext::new().await;
 
-    // Create a keystore
+    // Create a keyring
     keyring
-        .create_keystore(&authority)
+        .create_keyring(&authority)
         .await
-        .expect("Failed to create keystore");
+        .expect("Failed to create keyring");
 
-    let new_key = Curve25519::new(Pubkey::new_unique().to_bytes());
-    let add_entry_data = new_key.to_keystore_entry().unwrap();
+    let new_key = EncryptionKeyConfig::Curve25519(Curve25519(Pubkey::new_unique().to_bytes()));
 
     // Fund rent for realloc
     keyring
         .process_ixs(
             &[get_fund_rent_instruction(
+                &keyring,
                 &authority.pubkey(),
-                add_entry_data.data_len(),
+                get_instance_packed_len(&new_key).unwrap(),
             )],
             &[&authority],
         )
@@ -112,25 +116,23 @@ async fn can_add_key() {
 
     // Add an entry to the keystore
     keyring
-        .add_entry(&authority, add_entry_data.clone())
+        .add_entry(&authority, new_key.clone())
         .await
         .expect("Failed to add key");
 
     // Manually grabbing account to check buffer length
-    let keystore_account = keyring
-        .get_keystore_account(&authority.pubkey())
+    let keyring_account = keyring
+        .get_keyring_account(&authority.pubkey())
         .await
-        .expect("Failed to fetch keystore account");
-    println!("Keystore data length: {}", keystore_account.data.len());
+        .expect("Failed to fetch keyring account");
+    println!("Keystore data length: {}", keyring_account.data.len());
 
     // Check to make sure the key was added
     let keystore = keyring
         .get_keystore(&authority.pubkey())
         .await
-        .expect("Failed to fetch keystore");
-    let mock_keystore = Keystore {
-        entries: vec![add_entry_data],
-    };
+        .expect("Failed to fetch keyring");
+    let mock_keystore = Keystore(vec![new_key]);
     assert_eq!(keystore, mock_keystore);
 }
 
@@ -138,21 +140,21 @@ async fn can_add_key() {
 async fn can_add_multiple_keys() {
     let TestContext { keyring, authority } = TestContext::new().await;
 
-    // Create a keystore
+    // Create a keyring
     keyring
-        .create_keystore(&authority)
+        .create_keyring(&authority)
         .await
-        .expect("Failed to create keystore");
+        .expect("Failed to create keyring");
 
-    let curve_key = Curve25519::new(Pubkey::new_unique().to_bytes());
-    let curve_entry_data = curve_key.to_keystore_entry().unwrap();
+    let curve_key = EncryptionKeyConfig::Curve25519(Curve25519(Pubkey::new_unique().to_bytes()));
 
     // Fund rent for realloc
     keyring
         .process_ixs(
             &[get_fund_rent_instruction(
+                &keyring,
                 &authority.pubkey(),
-                curve_entry_data.data_len(),
+                get_instance_packed_len(&curve_key).unwrap(),
             )],
             &[&authority],
         )
@@ -161,22 +163,22 @@ async fn can_add_multiple_keys() {
 
     // Add an entry to the keystore
     keyring
-        .add_entry(&authority, curve_entry_data.clone())
+        .add_entry(&authority, curve_key.clone())
         .await
         .expect("Failed to add key");
 
     let mut fake_rsa_key_bytes = [0u8; 64];
     fake_rsa_key_bytes
         .copy_from_slice(&[Pubkey::new_unique().as_ref(), Pubkey::new_unique().as_ref()].concat());
-    let rsa_key = Rsa::new(fake_rsa_key_bytes);
-    let rsa_entry_data = rsa_key.to_keystore_entry().unwrap();
+    let rsa_key = EncryptionKeyConfig::Rsa(Rsa(fake_rsa_key_bytes));
 
     // Fund rent for realloc
     keyring
         .process_ixs(
             &[get_fund_rent_instruction(
+                &keyring,
                 &authority.pubkey(),
-                rsa_entry_data.data_len(),
+                get_instance_packed_len(&rsa_key).unwrap(),
             )],
             &[&authority],
         )
@@ -185,25 +187,23 @@ async fn can_add_multiple_keys() {
 
     // Add another entry to the keystore
     keyring
-        .add_entry(&authority, rsa_entry_data.clone())
+        .add_entry(&authority, rsa_key.clone())
         .await
         .expect("Failed to add key");
 
     // Manually grabbing account to check buffer length
-    let keystore_account = keyring
-        .get_keystore_account(&authority.pubkey())
+    let keyring_account = keyring
+        .get_keyring_account(&authority.pubkey())
         .await
-        .expect("Failed to fetch keystore account");
-    println!("Keystore data length: {}", keystore_account.data.len());
+        .expect("Failed to fetch keyring account");
+    println!("Keystore data length: {}", keyring_account.data.len());
 
     // Check to make sure the key was added
     let keystore = keyring
         .get_keystore(&authority.pubkey())
         .await
-        .expect("Failed to fetch keystore");
-    let mock_keystore = Keystore {
-        entries: vec![curve_entry_data, rsa_entry_data],
-    };
+        .expect("Failed to fetch keyring");
+    let mock_keystore = Keystore(vec![curve_key, rsa_key]);
     assert_eq!(keystore, mock_keystore);
 }
 
@@ -211,21 +211,21 @@ async fn can_add_multiple_keys() {
 async fn can_remove_key() {
     let TestContext { keyring, authority } = TestContext::new().await;
 
-    // Create a keystore
+    // Create a keyring
     keyring
-        .create_keystore(&authority)
+        .create_keyring(&authority)
         .await
-        .expect("Failed to create keystore");
+        .expect("Failed to create keyring");
 
-    let curve_key = Curve25519::new(Pubkey::new_unique().to_bytes());
-    let curve_entry_data = curve_key.to_keystore_entry().unwrap();
+    let curve_key = EncryptionKeyConfig::Curve25519(Curve25519(Pubkey::new_unique().to_bytes()));
 
     // Fund rent for realloc
     keyring
         .process_ixs(
             &[get_fund_rent_instruction(
+                &keyring,
                 &authority.pubkey(),
-                curve_entry_data.data_len(),
+                get_instance_packed_len(&curve_key).unwrap(),
             )],
             &[&authority],
         )
@@ -234,22 +234,22 @@ async fn can_remove_key() {
 
     // Add an entry to the keystore
     keyring
-        .add_entry(&authority, curve_entry_data.clone())
+        .add_entry(&authority, curve_key.clone())
         .await
         .expect("Failed to add key");
 
     let mut fake_rsa_key_bytes = [0u8; 64];
     fake_rsa_key_bytes
         .copy_from_slice(&[Pubkey::new_unique().as_ref(), Pubkey::new_unique().as_ref()].concat());
-    let rsa_key = Rsa::new(fake_rsa_key_bytes);
-    let rsa_entry_data = rsa_key.to_keystore_entry().unwrap();
+    let rsa_key = EncryptionKeyConfig::Rsa(Rsa(fake_rsa_key_bytes));
 
     // Fund rent for realloc
     keyring
         .process_ixs(
             &[get_fund_rent_instruction(
+                &keyring,
                 &authority.pubkey(),
-                rsa_entry_data.data_len(),
+                get_instance_packed_len(&rsa_key).unwrap(),
             )],
             &[&authority],
         )
@@ -258,39 +258,37 @@ async fn can_remove_key() {
 
     // Add another entry to the keystore
     keyring
-        .add_entry(&authority, rsa_entry_data.clone())
+        .add_entry(&authority, rsa_key.clone())
         .await
         .expect("Failed to add key");
 
     // Manually grabbing account to check buffer length
-    let keystore_account = keyring
-        .get_keystore_account(&authority.pubkey())
+    let keyring_account = keyring
+        .get_keyring_account(&authority.pubkey())
         .await
-        .expect("Failed to fetch keystore account");
+        .expect("Failed to fetch keyring account");
     println!("Added two keys to keystore");
-    println!("Keystore data length: {}", keystore_account.data.len());
+    println!("Keystore data length: {}", keyring_account.data.len());
 
     // Remove an entry from the keystore
     keyring
-        .remove_entry(&authority, curve_entry_data)
+        .remove_entry(&authority, curve_key)
         .await
         .expect("Failed to remove key");
 
     // Manually grabbing account to check buffer length
-    let keystore_account = keyring
-        .get_keystore_account(&authority.pubkey())
+    let keyring_account = keyring
+        .get_keyring_account(&authority.pubkey())
         .await
-        .expect("Failed to fetch keystore account");
+        .expect("Failed to fetch keyring account");
     println!("Removed Curve25519 key from keystore");
-    println!("Keystore data length: {}", keystore_account.data.len());
+    println!("Keystore data length: {}", keyring_account.data.len());
 
     // Check to make sure the key was added
     let keystore = keyring
         .get_keystore(&authority.pubkey())
         .await
-        .expect("Failed to fetch keystore");
-    let mock_keystore = Keystore {
-        entries: vec![rsa_entry_data],
-    };
+        .expect("Failed to fetch keyring");
+    let mock_keystore = Keystore(vec![rsa_key]);
     assert_eq!(keystore, mock_keystore);
 }

@@ -10,17 +10,22 @@ import {
 } from "@solana/web3.js";
 import {
   Curve25519,
+  EncryptionKeyConfig,
+  Keyring,
   Keystore,
-  RSA,
-  buildTransactionV0,
-  createAddEntryInstruction,
-  createCreateKeystoreInstruction,
-  createRemoveEntryInstruction,
-  getKeystore,
-  getKeystoreAccount,
-  getKeystoreAddress,
-  packKeystoreEntry,
+  Rsa,
 } from "../src";
+
+function getTestCurve25519Key(): EncryptionKeyConfig {
+  return new Curve25519(Keypair.generate().publicKey.toBuffer());
+}
+
+function getTestRsaKey(): EncryptionKeyConfig {
+  let bytes = Buffer.alloc(64);
+  bytes.set(Keypair.generate().publicKey.toBuffer(), 0);
+  bytes.set(Keypair.generate().publicKey.toBuffer(), 32);
+  return new Rsa(bytes);
+}
 
 /**
  * Keyring Program Tests
@@ -31,25 +36,10 @@ describe("Keyring Program Tests", async () => {
   });
   const authority = Keypair.generate();
 
-  const testCurve25519Keypair = Keypair.generate();
-  const testRSAKeypair = Keypair.generate();
+  const keyring = new Keyring(connection);
 
-  /**
-   * Sends a transaction with the provided instruction
-   * @param instruction The instruction to send
-   */
-  async function sendKeystoreTestTransaction(
-    instructions: TransactionInstruction[],
-  ): Promise<void> {
-    const tx = await buildTransactionV0(
-      connection,
-      instructions,
-      authority.publicKey,
-      [authority],
-    );
-    const txid = await connection.sendTransaction(tx, { skipPreflight: true });
-    console.log(`Transaction ID: ${txid}`);
-  }
+  let testCurve25519Key: EncryptionKeyConfig;
+  let testRsaKey: EncryptionKeyConfig;
 
   async function getFundRentInstruction(
     authority: PublicKey,
@@ -57,23 +47,19 @@ describe("Keyring Program Tests", async () => {
   ): Promise<TransactionInstruction> {
     return SystemProgram.transfer({
       fromPubkey: authority,
-      toPubkey: getKeystoreAddress(authority)[0],
+      toPubkey: keyring.getKeyringAddress(authority)[0],
       lamports: await connection.getMinimumBalanceForRentExemption(newSpace),
     });
   }
 
-  /**
-   * Sleep for a given number of milliseconds
-   * @param ms The number of milliseconds to sleep
-   * @returns A promise that resolves after the given number of milliseconds
-   *         have passed
-   */
   async function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  const sleepTime = 3000;
+
   /**
-   * Fund the authority
+   * Fund the authority and set the test keys
    */
   before(async () => {
     console.log("Airdropping...");
@@ -82,55 +68,68 @@ describe("Keyring Program Tests", async () => {
       0.5 * LAMPORTS_PER_SOL,
     );
     // sleep 2 seconds
-    await sleep(2000);
+    await sleep(sleepTime);
+    testCurve25519Key = getTestCurve25519Key();
+    testRsaKey = getTestRsaKey();
   });
 
   /**
-   * Can create a keystore
+   * Can create a keyring account
    */
   it("Can create a keystore", async () => {
-    console.log("Creating keystore...");
+    console.log("Creating keyring...");
     console.log(
-      `Keystore: ${getKeystoreAddress(authority.publicKey)[0].toBase58()}`,
+      `Keyring Account: ${keyring
+        .getKeyringAddress(authority.publicKey)[0]
+        .toBase58()}`,
     );
     console.log(`Authority: ${authority.publicKey.toBase58()}`);
-    const instruction = createCreateKeystoreInstruction(authority.publicKey);
-    await sendKeystoreTestTransaction([instruction]);
+
+    const instruction = keyring.createKeyringInstruction(authority.publicKey);
+    const txid = await keyring.processInstructions([instruction], authority, [
+      authority,
+    ]);
+    console.log(`Transaction ID: ${txid}`);
+
     // sleep 2 seconds
-    await sleep(2000);
+    await sleep(sleepTime);
     // Check to make sure the keystore was created
-    await getKeystore(connection, authority.publicKey);
+    await keyring.getKeystore(authority.publicKey);
   });
 
   /**
    * Can add a key
    */
   it("Can add a key", async () => {
-    const newKey = new Curve25519(testCurve25519Keypair.publicKey.toBuffer());
-    const addEntryData = packKeystoreEntry(newKey.toKeystoreEntry());
-    console.log(`About to pack ${addEntryData.length} bytes...`);
+    const newKey = testCurve25519Key;
+
     const fundRentInstruction = await getFundRentInstruction(
       authority.publicKey,
-      addEntryData.length,
+      newKey.getPackedLength(),
     );
-    const instruction = createAddEntryInstruction(
+
+    const instruction = await keyring.addEntryInstruction(
       authority.publicKey,
-      addEntryData,
+      newKey,
     );
-    await sendKeystoreTestTransaction([fundRentInstruction, instruction]);
+    const txid = await keyring.processInstructions(
+      [fundRentInstruction, instruction],
+      authority,
+      [authority],
+    );
+    console.log(`Transaction ID: ${txid}`);
+
     // sleep 2 seconds
-    await sleep(2000);
+    await sleep(sleepTime);
     // Manually grabbing account to check buffer length
-    const keystoreAccount = await getKeystoreAccount(
-      connection,
+    const keystoreAccount = await keyring.getKeyringAccount(
       authority.publicKey,
     );
     console.log(`Keystore data length: ${keystoreAccount.data.length}`);
+
     // Check to make sure the key was added
-    const keystore = await getKeystore(connection, authority.publicKey);
-    const mockKeystore = new Keystore([
-      new Curve25519(testCurve25519Keypair.publicKey.toBuffer()),
-    ]);
+    const keystore = await keyring.getKeystore(authority.publicKey);
+    const mockKeystore = new Keystore([testCurve25519Key]);
     assert(
       JSON.stringify(keystore) == JSON.stringify(mockKeystore),
       "Keystores do not match!",
@@ -141,32 +140,35 @@ describe("Keyring Program Tests", async () => {
    * Can add another key
    */
   it("Can add another key", async () => {
-    const newKey = new RSA(testRSAKeypair.publicKey.toBuffer());
-    const addEntryData = packKeystoreEntry(newKey.toKeystoreEntry());
-    console.log(`About to pack ${addEntryData.length} bytes...`);
+    const newKey = testRsaKey;
+
     const fundRentInstruction = await getFundRentInstruction(
       authority.publicKey,
-      addEntryData.length,
+      newKey.getPackedLength(),
     );
-    const instruction = createAddEntryInstruction(
+
+    const instruction = await keyring.addEntryInstruction(
       authority.publicKey,
-      addEntryData,
+      newKey,
     );
-    await sendKeystoreTestTransaction([fundRentInstruction, instruction]);
+    const txid = await keyring.processInstructions(
+      [fundRentInstruction, instruction],
+      authority,
+      [authority],
+    );
+    console.log(`Transaction ID: ${txid}`);
+
     // sleep 2 seconds
-    await sleep(2000);
+    await sleep(sleepTime);
     // Manually grabbing account to check buffer length
-    const keystoreAccount = await getKeystoreAccount(
-      connection,
+    const keystoreAccount = await keyring.getKeyringAccount(
       authority.publicKey,
     );
     console.log(`Keystore data length: ${keystoreAccount.data.length}`);
+
     // Check to make sure the key was added
-    const keystore = await getKeystore(connection, authority.publicKey);
-    const mockKeystore = new Keystore([
-      new Curve25519(testCurve25519Keypair.publicKey.toBuffer()),
-      new RSA(testRSAKeypair.publicKey.toBuffer()),
-    ]);
+    const keystore = await keyring.getKeystore(authority.publicKey);
+    const mockKeystore = new Keystore([testCurve25519Key, testRsaKey]);
     assert(
       JSON.stringify(keystore) == JSON.stringify(mockKeystore),
       "Keystores do not match!",
@@ -177,23 +179,28 @@ describe("Keyring Program Tests", async () => {
    * Can remove a key
    */
   it("Can remove a key", async () => {
-    const removeKey = new Curve25519(
-      testCurve25519Keypair.publicKey.toBuffer(),
-    );
-    const removeEntryData = packKeystoreEntry(removeKey.toKeystoreEntry());
-    console.log(`About to remove ${removeEntryData.length} bytes...`);
-    const instruction = createRemoveEntryInstruction(
+    const removeKey = testCurve25519Key;
+
+    const instruction = await keyring.removeEntryInstruction(
       authority.publicKey,
-      removeEntryData,
+      removeKey,
     );
-    await sendKeystoreTestTransaction([instruction]);
+    const txid = await keyring.processInstructions([instruction], authority, [
+      authority,
+    ]);
+    console.log(`Transaction ID: ${txid}`);
+
     // sleep 2 seconds
     await sleep(2000);
-    // Check to make sure the key was removed
-    const keystore = await getKeystore(connection, authority.publicKey);
-    const mockKeystore = new Keystore([
-      new RSA(testRSAKeypair.publicKey.toBuffer()),
-    ]);
+    // Manually grabbing account to check buffer length
+    const keystoreAccount = await keyring.getKeyringAccount(
+      authority.publicKey,
+    );
+    console.log(`Keystore data length: ${keystoreAccount.data.length}`);
+
+    // Check to make sure the key was added
+    const keystore = await keyring.getKeystore(authority.publicKey);
+    const mockKeystore = new Keystore([testRsaKey]);
     assert(
       JSON.stringify(keystore) == JSON.stringify(mockKeystore),
       "Keystores do not match!",

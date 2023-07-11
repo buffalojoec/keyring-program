@@ -1,12 +1,15 @@
 //! The Keyring Program Client
 
 use {
-    crate::error::KeyringError,
+    crate::{
+        error::KeyringError,
+        keystore::{EncryptionKeyConfig, Keystore},
+    },
+    borsh::{BorshDeserialize, BorshSerialize},
     solana_sdk::{
         account::Account, instruction::Instruction, message::Message, pubkey::Pubkey,
         signature::Keypair, signer::Signer, signers::Signers, transaction::Transaction,
     },
-    spl_keyring_program::{state::Keystore, tlv::KeystoreEntry},
     spl_token_client::client::{ProgramClient, SendTransaction},
     std::{fmt, sync::Arc},
 };
@@ -44,22 +47,28 @@ where
         }
     }
 
-    /// Fetch the keystore account
-    pub async fn get_keystore_account(&self, authority: &Pubkey) -> Result<Account, KeyringError> {
+    /// Get the users's keyring address
+    pub fn get_keyring_address(&self, authority: &Pubkey) -> (Pubkey, u8) {
+        spl_keyring_program::state::Keyring::pda(&self.program_id, authority)
+    }
+
+    /// Fetch the user's keyring account
+    pub async fn get_keyring_account(&self, authority: &Pubkey) -> Result<Account, KeyringError> {
         self.client
-            .get_account(Keystore::pda(&spl_keyring_program::id(), authority).0)
+            .get_account(self.get_keyring_address(authority).0)
             .await
             .map_err(KeyringError::Client)?
             .ok_or(KeyringError::KeystoreNotFound)
     }
 
-    /// Fetch the keystore account, unpacked
+    /// Fetch the user's keyring account, unpacked
     pub async fn get_keystore(&self, authority: &Pubkey) -> Result<Keystore, KeyringError> {
-        let keystore_account = self.get_keystore_account(authority).await?;
-        if keystore_account.data.is_empty() {
+        let keyring_account = self.get_keyring_account(authority).await?;
+        if keyring_account.data.is_empty() {
             Ok(Keystore::default())
         } else {
-            Keystore::unpack(&keystore_account.data).map_err(KeyringError::Program)
+            Keystore::try_from_slice(&keyring_account.data)
+                .map_err(|e| KeyringError::Program(e.into()))
         }
     }
 
@@ -99,7 +108,7 @@ where
         Ok(transaction)
     }
 
-    /// Construct a transaction from a list of instructions
+    /// Process a transaction from a list of instructions
     pub async fn process_ixs<S: Signers>(
         &self,
         keyring_instructions: &[Instruction],
@@ -117,10 +126,10 @@ where
         Ok(())
     }
 
-    /// Create a new keystore
-    pub async fn create_keystore(&self, authority: &Keypair) -> Result<(), KeyringError> {
+    /// Create a new keyring
+    pub async fn create_keyring(&self, authority: &Keypair) -> Result<(), KeyringError> {
         self.process_ixs(
-            &[spl_keyring_program::instruction::create_keystore(
+            &[spl_keyring_program::instruction::create_keyring(
                 &spl_keyring_program::id(),
                 &authority.pubkey(),
             )?],
@@ -133,13 +142,20 @@ where
     pub async fn add_entry(
         &self,
         authority: &Keypair,
-        entry: KeystoreEntry,
+        entry: EncryptionKeyConfig,
     ) -> Result<(), KeyringError> {
+        let mut keystore = self.get_keystore(&authority.pubkey()).await?;
+        keystore.0.push(entry.clone());
+
+        let data = keystore
+            .try_to_vec()
+            .map_err(|e| KeyringError::Program(e.into()))?;
+
         self.process_ixs(
-            &[spl_keyring_program::instruction::add_entry(
+            &[spl_keyring_program::instruction::update_keyring(
                 &spl_keyring_program::id(),
                 &authority.pubkey(),
-                entry.pack().map_err(KeyringError::Program)?,
+                data,
             )?],
             &[authority],
         )
@@ -150,13 +166,20 @@ where
     pub async fn remove_entry(
         &self,
         authority: &Keypair,
-        entry: KeystoreEntry,
+        entry: EncryptionKeyConfig,
     ) -> Result<(), KeyringError> {
+        let mut keystore = self.get_keystore(&authority.pubkey()).await?;
+        keystore.0.retain(|e| e != &entry);
+
+        let data = keystore
+            .try_to_vec()
+            .map_err(|e| KeyringError::Program(e.into()))?;
+
         self.process_ixs(
-            &[spl_keyring_program::instruction::remove_entry(
+            &[spl_keyring_program::instruction::update_keyring(
                 &spl_keyring_program::id(),
                 &authority.pubkey(),
-                entry.pack().map_err(KeyringError::Program)?,
+                data,
             )?],
             &[authority],
         )
