@@ -4,11 +4,11 @@ Program for managing encryption keys.
 
 Goals:
 
-- Store one or more public encryption keys for a particular user in a unique on-chain location protected by their authority
-- Support additional configurations required for a particular encryption algorithm key
-- Allow a user to add or remove keys from their on-chain keystore
-- Allow for future support of new encryption algorithms with this program being **frozen**
-- Establish a workflow (through sRFC-like process) to add support/recognition for new encryption algorithms
+- Store one or more public encryption keys for a particular user in a unique on-chain location protected by their authority.
+- Support additional configurations required for a particular encryption algorithm key.
+- Allow a user to add or remove keys from their on-chain keystore.
+- Allow for future support of new encryption algorithms with this program being **frozen**.
+- Establish a workflow (through sRFC-like process) to add support/recognition for new encryption algorithms.
 
 ## Storing Encryption Keys
 
