@@ -46,10 +46,10 @@ The nested TLV structure is formatted as follows:
             * (Configuration: `K, V`)
                 * T: The configuration key (provided by sRFC workflow)
                 * L: The configuration value length
-                * T: The configuration value
+                * V: The configuration value
 ```
 
-As you can see, within each entry we have a **key** and a **configuration**. The discriminator for the key will dictate the key's encrpyion algorithm and qsubsequently it's length in bytes, while the discriminator for configurations will be akin to a `boolean` or `Option`. In psuedo-code:
+As you can see, within each entry we have a **key** and a **configuration**. The discriminator for the key will dictate the key's encryption algorithm and subsequently its length in bytes, while the discriminator for configurations will be akin to a `boolean` or `Option`. In psuedo-code:
 
 ```text
 Has configs:            [<config discriminator>] [<length>] [<data>] 
@@ -70,12 +70,12 @@ More specifically, in order to ensure we can seamlessly add support for more enc
 
 - The program simply writes bytes to the keystore accounts, with _some_ guardrails on pre-defined discriminators
   - For example, the program will ensure you have the proper TLV discriminators present to:
-    - Define a new keystore entry
-    - Define additional configurations for a key
-- The client introduces new discriminators and actually holds the source code for deserializing keystore entries from an on-chain account
-  - This allows us to use an sRFC workflow to agree on the byte-wise structure of a new encryption algorithm **without introducing breaking changes to the code**
+    - Define a new keystore entry.
+    - Define additional configurations for a key.
+- The client introduces new discriminators and actually holds the source code for deserializing keystore entries from an on-chain account.
+  - This allows us to use an sRFC workflow to agree on the byte-wise structure of a new encryption algorithm **without introducing breaking changes to the program**.
 
-## Establishing an sRFC-Like Workflow
+## Establishing an sRFC Workflow
 
 Along with this program we must establish a workflow for adding new encryption algorithms to the supported collection within the program's client(s).
 
@@ -83,9 +83,9 @@ A simple solution is to merely use GitHub Pull Requests directly into the client
 
 When seeking to introduce support for a new encryption algorithm in the Keyring Program, one should submit a Pull Request with:
 
-- An overview of this encryption algorithm and links to resources where community members can read more
-- Some use cases on Solana where support for this algorithm is paramount
-- A unique 8-byte discriminator for the encryption algorithm (the key discriminator)
-- If configurations are required to use this encryption algorithm: An explicit data structure outlining all required configurations
+- An overview of this encryption algorithm and links to resources where community members can read more.
+- Some use cases on Solana where support for this algorithm is paramount.
+- A unique 8-byte discriminator for the encryption algorithm (the key discriminator).
+- If configurations are required to use this encryption algorithm: An explicit data structure outlining all required configurations.
 
 ⚠️ Note: I would like to make this something like a publicly-hosted JSON that we can change without having to push any code changes, on- or off-chain.
